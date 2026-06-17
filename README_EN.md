@@ -1,0 +1,220 @@
+# 🔌 Codeck
+
+> **codeck**: Let Codex, Claude Code, Gemini CLI / agy CLI hand off context locally without pain.  
+> *codeck: 让 Codex、Claude Code、Gemini CLI / agy CLI 之间无痛交接上下文的本地工具。*
+
+---
+
+[简体中文](./README.md) | [English](./README_EN.md)
+
+---
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D%2018.0.0-blue.svg)](https://nodejs.org/)
+[![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.org)
+
+## 🎯 Why Codeck?
+
+As a developer using AI-assisted coding, you might:
+1. **Love the smooth experience of Codex** for your day-to-day coding workflows;
+2. But occasionally prefer **Claude Code** for complex code comprehension, architectural analysis, and reviews;
+3. Or find **Gemini CLI** / **Antigravity CLI** to be a lifesaver for large-context tasks, frontend styling, or writing documentation.
+
+**Since each tool has its own strengths, why choose? You can have them all!**  
+However, switching between these CLI tools usually comes with a major pain point: **you have to copy your project context, tech stack, and current git diffs manually, and repeat your project explanation to the new AI.**
+
+**Codeck is built to solve this exact problem.**  
+Think of Codeck as a **Codex Subagent Router**, but instead of invoking different prompts within the same model, it delegates tasks to different specialized local AI CLI tools. It packages your current workspace context into a clean payload and hands it off seamlessly.
+
+---
+
+## ✨ Key Features
+
+- 📦 **Zero-Config Context Packaging**: Automatically aggregates your Git state, uncommitted diffs, project background description, global constraints, and relevant files into a structured markdown context.
+- 🧭 **Intelligent Routing**: Analyzes your task description (e.g. "Review architecture", "Fix UI style") and routes it to the most capable AI tool.
+- 📊 **Multi-Model Compare (`compare`)**: Send a single task to multiple executors (e.g., Claude and Gemini) and compare their solutions side-by-side.
+- 🌐 **Web Session Reuse (`gemini_web`)**: Open Gemini Web in your browser with the fully packed context copied to your clipboard—saving API costs by reusing your web subscription quota.
+- 🔌 **Codex MCP Integration**: Add Codeck as an MCP server in Codex. You can query models directly from Codex (e.g. *"Ask Gemini to analyze this performance bottleneck"*), and Codex will run Codeck behind the scenes.
+- 📈 **Quota & Cost Tracking**: Displays precise token usage (Prompt/Completion) and estimated USD costs at the end of each run, saving metrics to history logs.
+
+---
+
+## 🚀 3-Step Quick Start
+
+### Step 1: Install Codeck
+Ensure you have Node.js (v18+) installed. Clone the repository and run:
+
+```bash
+npm install
+npm run build
+npm link
+```
+
+Check if the installation was successful and verify which local AI CLIs are configured:
+```bash
+codeck doctor
+```
+
+> 💡 **Tip**: If you don't have Gemini or Antigravity CLI installed, Codeck can install them for you:
+> ```bash
+> codeck install gemini        # Installs @google/gemini-cli
+> codeck install antigravity   # Installs Google agy CLI
+> ```
+
+### Step 2: Initialize in Your Project Workspace
+Navigate to your project root folder and initialize Codeck:
+```bash
+codeck init
+```
+This will create a `.codeck/` directory containing:
+- `config.toml`: Routing rules, executor permissions, and token budget parameters.
+- `project.md`: **Describe your project architecture & tech stack** here so the AI understands your system.
+- `constraints.md`: **Specify your code styles & coding rules** here so the AI respects them.
+
+### Step 3: Run Your First Routed Task
+Let Codeck pick the best executor automatically based on keywords:
+```bash
+codeck auto "The UI layout of this page is misaligned. How do I fix it?"
+```
+Or target a specific executor directly:
+```bash
+codeck ask gemini "Identify any security vulnerabilities in the current changes"
+```
+
+---
+
+## 🛠 Commands Guide
+
+| Command | Example | Description |
+| :--- | :--- | :--- |
+| **`codeck init`** | `codeck init` | Initializes `.codeck` configuration and description files. |
+| **`codeck doctor`** | `codeck doctor` | Diagnoses the connectivity and setup status of local AI CLIs. |
+| **`codeck list`** | `codeck list` | Lists all configured executor profiles and their permissions. |
+| **`codeck context`** | `codeck context` | Rebuilds and updates the local context snapshot `.codeck/context.md`. |
+| **`codeck pick`** | `codeck pick "Architecture refactoring"` | Previews which executor would be chosen for a task based on routing rules. |
+| **`codeck auto`** | `codeck auto "Fix css alignment"` | **Auto-Routing**: Automatically selects the best executor and runs the task. |
+| **`codeck ask`** | `codeck ask gemini "Write tests"` | **Read-Only**: Sends a task to a specific executor under a smaller token budget. |
+| **`codeck delegate`**| `codeck delegate codex_implementer "Fix bugs" -y` | **Implementation**: Allows executors to write files or run commands (use `-y` to auto-approve). |
+| **`codeck compare`** | `codeck compare claude_architect,gemini_frontend "Refactor scheme"` | **Comparison**: Runs the task on multiple executors and outputs side-by-side results. |
+| **`codeck last`** | `codeck last` | Displays the output from the last executed task. |
+| **`codeck bringback`**| `codeck bringback` | Formats the latest execution output as a host-ready handoff payload. |
+
+---
+
+## 🧠 How It Works
+
+### 1. Context Assembly
+When running a task, Codeck bundles workspace components into a structured Markdown prompt while respecting context budget limits:
+
+```mermaid
+graph TD
+    A[Task Description] --> F[Packaged Context Markdown]
+    B[.codeck/project.md Description] --> F
+    C[.codeck/constraints.md Rules] --> F
+    D[Git State & Uncommitted Diff] --> F
+    E[Referenced Source Files] --> F
+```
+
+### 2. Budget Control
+To avoid lag or timeouts, Codeck limits context lengths:
+- **`ask_context_chars`** (Default `16,000` chars): Used for quick read-only inquiries (`ask` mode).
+- **`max_context_chars`** (Default `60,000` chars): Used for complex writes (`delegate` mode) or when `--full-context` is passed.
+
+---
+
+## ⚙️ Customizing Rules & Keys
+
+Customize your routing strategies in `.codeck/config.toml`.
+
+### 1. Custom Keywords
+Define routing keywords under `[routing]`. If a task contains matching terms, it will route to that executor:
+
+```toml
+[routing]
+default_executor = "gemini"
+
+[[routing.rules]]
+name = "frontend"
+executor = "gemini_frontend"
+keywords = ["frontend", "ui", "css", "html", "style", "page", "layout"]
+
+[[routing.rules]]
+name = "architecture"
+executor = "claude_architect"
+keywords = ["architecture", "review", "risk", "refactor", "design"]
+```
+
+### 2. Built-in Executors
+- 🧑‍🎨 **`gemini_frontend`**: Uses Gemini, optimized for frontend layouts, screenshots, and long-context analysis.
+- 🏗 **`claude_architect`**: Uses Claude, ideal for deep architectural refactoring and code reviews.
+- 💻 **`codex_implementer`**: Allows file writes and command executions to apply fixes back into Codex.
+- 🌐 **`gemini_web`** (macOS only): Opens Gemini Web and copies the packaged prompt to your clipboard (uses browser subscription for free).
+
+### 3. API Key & Direct REST API (New!)
+You can configure API keys and run tasks directly without installing CLI wrappers:
+
+#### Option A: Auto-Load `.env` / Custom Environment Variables
+Create a `.env` file at your project root:
+```env
+GEMINI_API_KEY=your_gemini_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
+```
+Codeck will load these variables automatically and inject them when spawning CLIs. You can also specify them in `.codeck/config.toml`:
+```toml
+[agents.claude]
+command = "claude"
+[agents.claude.env]
+ANTHROPIC_API_KEY = "your_key_here"
+```
+
+#### Option B: Direct API Executors (No CLI Needed)
+Use the built-in `gemini_api` and `claude_api` adapters to query the REST APIs directly via Node's native `fetch`:
+```bash
+# Direct REST call to Gemini API without local CLI tools
+codeck ask gemini_api "Explain recursion in 1 sentence"
+
+# Direct REST call to Anthropic API
+codeck ask claude_api "Explain recursion in 1 sentence"
+```
+Configure specific model overrides in `.codeck/config.toml`:
+```toml
+[agents.gemini_api]
+api_key = "AIzaSy..."
+model = "gemini-2.5-pro"  # Defaults to gemini-2.5-flash
+```
+
+---
+
+## 🔌 Codex MCP Integration (Recommended)
+
+Once registered as an MCP server, Codex will invoke Codeck automatically during natural chat sessions.
+
+### 1. Register MCP Server
+Run the following registration command using the absolute path to your Codeck installation:
+```bash
+codex mcp add codeck -- node /Users/yourname/codeck/dist/index.js mcp start
+```
+
+### 2. Conversational Context Hand-off
+Whenever you mention an external model name, Codex will delegate the task to Codeck:
+> *“Please review my recent changes using Gemini to identify any potential performance bottlenecks.”*
+
+Codex will invoke Gemini behind the scenes and display the final feedback seamlessly inside your chat.
+
+---
+
+## 🤝 Contributing
+
+Bug reports, suggestions, and pull requests to adapt new CLI engines (such as DeepSeek CLI) are always welcome!
+
+1. Fork this repository.
+2. Create your feature branch (`git checkout -b feature/amazing-feature`).
+3. Commit your changes (`git commit -m 'Add some amazing feature'`).
+4. Push to the branch (`git push origin feature/amazing-feature`).
+5. Open a Pull Request.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT](LICENSE) License.
