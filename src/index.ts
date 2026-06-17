@@ -2,153 +2,204 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import fs from 'fs';
-import path from 'path';
 import { marked } from 'marked';
 import TerminalRenderer from 'marked-terminal';
-import { initDevDeck, runDoctor, getConfigPath, getDevDeckDir } from './config.js';
+import { createInterface } from 'readline/promises';
+import { stdin as input, stdout as output } from 'process';
+import { initDevDeck, runDoctor, getConfigPath, loadConfig } from './config.js';
 import { writeContextCache } from './context.js';
-import { runAgent, getLastOutput } from './runner.js';
 import { startMcpServer } from './mcp.js';
+import { compareExecutors, createHandoff, getRun, listExecutors, routeTask } from './router.js';
+import type { RouteMode } from './models.js';
 
-// Setup marked terminal renderer
-marked.setOptions({
-  renderer: new TerminalRenderer()
-});
+marked.setOptions({ renderer: new TerminalRenderer() });
 
 const program = new Command();
 
 program
   .name('devdeck')
-  .description('DevDeck: Context handoff bridge for Codex, Claude, and Gemini CLI')
+  .description('DevDeck: Codex-first local AI CLI Router MCP server')
   .version('0.1.0');
 
-// 1. devdeck init
+async function confirmDangerousExecutor(executor: string, yes: boolean) {
+  const profile = loadConfig().executors[executor];
+  if (!profile || (!profile.write_files && !profile.run_shell) || yes) return;
+
+  const rl = createInterface({ input, output });
+  const answer = await rl.question(`Executor "${executor}" has write_files=${profile.write_files}, run_shell=${profile.run_shell}. Continue? [y/N] `);
+  rl.close();
+  if (!/^y(es)?$/i.test(answer.trim())) {
+    throw new Error('Cancelled by user.');
+  }
+}
+
+function taskFrom(parts: string[]): string {
+  return parts.join(' ').trim();
+}
+
 program
   .command('init')
-  .description('Initialize DevDeck workspace (creates .devdeck directory and config.toml)')
+  .description('Initialize DevDeck workspace')
   .action(() => {
     try {
       const res = initDevDeck();
-      if (res.created) {
-        console.log(chalk.green('✔ Initialized DevDeck successfully!'));
-        console.log(chalk.gray(`Config created at: ${res.configPath}`));
-        console.log(chalk.gray(`Edit config.toml to configure your local CLI commands.`));
-      } else {
-        console.log(chalk.yellow('ℹ DevDeck is already initialized in this directory.'));
-        console.log(chalk.gray(`Config file path: ${res.configPath}`));
-      }
+      console.log(res.created ? chalk.green('Initialized DevDeck.') : chalk.yellow('DevDeck is already initialized.'));
+      console.log(chalk.gray(`Config: ${res.configPath}`));
     } catch (err: any) {
       console.error(chalk.red(`Error: ${err.message}`));
       process.exit(1);
     }
   });
 
-// 2. devdeck doctor
 program
   .command('doctor')
-  .description('Verify configurations and check if local AI CLI commands are installed')
+  .description('Probe configured agents and executor profiles')
   .action(() => {
     try {
       const res = runDoctor();
       if (!res.configExists) {
-        console.log(chalk.red('✗ DevDeck is not initialized. Run "devdeck init" first.'));
+        console.log(chalk.red('DevDeck is not initialized. Run "devdeck init" first.'));
         process.exit(1);
       }
-
-      console.log(chalk.bold('\n⚕ DevDeck Doctor Diagnosis Report:\n'));
-      console.log(`${chalk.green('✔')} Config file found at: ${getConfigPath()}`);
-
-      let allOk = true;
+      console.log(chalk.bold('\nDevDeck Doctor\n'));
+      console.log(`${chalk.green('config')} ${getConfigPath()}`);
       for (const agent of res.agents) {
-        if (agent.exists) {
-          console.log(`${chalk.green('✔')} Agent [${chalk.cyan(agent.agentName)}]: \`${agent.command}\` is ${chalk.green('installed')}`);
-        } else {
-          console.log(`${chalk.red('✗')} Agent [${chalk.cyan(agent.agentName)}]: \`${agent.command}\` is ${chalk.red('NOT found')} in your PATH`);
-          allOk = false;
-        }
+        console.log(`${agent.exists ? chalk.green('ok') : chalk.red('missing')} ${agent.agentName} adapter=${agent.adapter} command=${agent.command} - ${agent.message}`);
       }
-
-      if (allOk) {
-        console.log(chalk.green('\n✔ All configured AI CLI commands are available! You are ready to go. 🔌\n'));
-      } else {
-        console.log(chalk.yellow('\n⚠ Some agent CLI commands are missing. Please make sure they are installed and in your system PATH.\n'));
-      }
+      console.log(`\nExecutors:\n${res.executors.map((name) => `- ${name}`).join('\n')}`);
     } catch (err: any) {
-      console.error(chalk.red(`Doctor check failed: ${err.message}`));
+      console.error(chalk.red(`Doctor failed: ${err.message}`));
       process.exit(1);
     }
   });
 
-// 3. devdeck context
 program
   .command('context')
-  .description('Scan project workspace and refresh .devdeck/context.md')
+  .description('Refresh .devdeck/context.md')
   .action(() => {
     try {
       writeContextCache();
-      const contextFilePath = path.join(getDevDeckDir(), 'context.md');
-      console.log(chalk.green('✔ Project context updated!'));
-      console.log(chalk.gray(`Context saved at: ${contextFilePath}`));
+      console.log(chalk.green('Project context updated.'));
     } catch (err: any) {
       console.error(chalk.red(`Failed to build context: ${err.message}`));
       process.exit(1);
     }
   });
 
-// 4. devdeck ask <agent> <prompt>
 program
-  .command('ask')
-  .description('Delegate a task to a local subagent (codex, claude, gemini)')
-  .argument('<agent>', 'Agent name (e.g. codex, claude, gemini)')
-  .argument('<prompt>', 'Prompt or task description')
-  .action(async (agent, prompt) => {
-    try {
-      // 1. Always refresh context before asking
-      writeContextCache();
-      
-      // 2. Run the agent
-      const result = await runAgent(agent, prompt);
-      
-      if (result.exitCode === 0) {
-        console.log(chalk.green(`\n✔ Subagent ${agent} completed successfully.`));
-        console.log(chalk.gray(`Log saved to: ${result.logPath}\n`));
-      } else {
-        console.log(chalk.red(`\n✗ Subagent ${agent} exited with code ${result.exitCode}`));
-        process.exit(result.exitCode || 1);
-      }
-    } catch (err: any) {
-      console.error(chalk.red(`\nExecution failed: ${err.message}`));
-      process.exit(1);
-    }
-  });
-
-// 5. devdeck last
-program
-  .command('last')
-  .description('Print the markdown formatted output of the last agent execution')
+  .command('list')
+  .description('List executor profiles')
   .action(() => {
     try {
-      const last = getLastOutput();
-      if (!last) {
-        console.log(chalk.yellow('No execution logs found. Try running "devdeck ask" first.'));
-        return;
-      }
-      
-      console.log('\n' + chalk.bold('=== Last Subagent Output ===') + '\n');
-      console.log(marked(last));
+      console.log(listExecutors());
     } catch (err: any) {
-      console.error(chalk.red(`Failed to read last output: ${err.message}`));
+      console.error(chalk.red(err.message));
       process.exit(1);
     }
   });
 
-// 6. devdeck mcp start
+program
+  .command('route')
+  .description('Fallback route command: devdeck route <mode> <executor> <task...>')
+  .argument('<mode>', 'ask, subagent, or delegate')
+  .argument('<executor>', 'Executor profile')
+  .argument('<task...>', 'Task text')
+  .option('-f, --file <file...>', 'Files to include')
+  .option('-y, --yes', 'Confirm writable/shell-enabled executor')
+  .action(async (mode: RouteMode, executor: string, taskParts: string[], options) => {
+    try {
+      await confirmDangerousExecutor(executor, Boolean(options.yes));
+      const run = await routeTask({ mode, executor, task: taskFrom(taskParts), files: options.file }, { caller: 'cli' });
+      console.log(run.output);
+      console.log(chalk.gray(`\nRun: ${run.id}`));
+    } catch (err: any) {
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('ask')
+  .description('Fallback ask command')
+  .argument('<executor>', 'Executor profile')
+  .argument('<task...>', 'Task text')
+  .option('-f, --file <file...>', 'Files to include')
+  .action(async (executor: string, taskParts: string[], options) => {
+    try {
+      const run = await routeTask({ mode: 'ask', executor, task: taskFrom(taskParts), files: options.file }, { caller: 'cli' });
+      console.log(run.output);
+      console.log(chalk.gray(`\nRun: ${run.id}`));
+    } catch (err: any) {
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('delegate')
+  .description('Fallback delegate command')
+  .argument('<executor>', 'Executor profile')
+  .argument('<task...>', 'Task text')
+  .option('-f, --file <file...>', 'Files to include')
+  .option('-y, --yes', 'Confirm writable/shell-enabled executor')
+  .action(async (executor: string, taskParts: string[], options) => {
+    try {
+      await confirmDangerousExecutor(executor, Boolean(options.yes));
+      const run = await routeTask({ mode: 'delegate', executor, task: taskFrom(taskParts), files: options.file }, { caller: 'cli' });
+      console.log(run.output);
+      console.log(chalk.gray(`\nRun: ${run.id}`));
+    } catch (err: any) {
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('compare')
+  .description('Fallback compare command')
+  .argument('<executors>', 'Comma-separated executor profiles')
+  .argument('<task...>', 'Task text')
+  .option('-f, --file <file...>', 'Files to include')
+  .action(async (executors: string, taskParts: string[], options) => {
+    try {
+      const result = await compareExecutors({ executors: executors.split(',').map((s) => s.trim()), task: taskFrom(taskParts), files: options.file }, { caller: 'cli' });
+      console.log(result.output);
+    } catch (err: any) {
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('last')
+  .description('Print latest run output')
+  .action(() => {
+    const run = getRun();
+    if (!run) {
+      console.log(chalk.yellow('No DevDeck runs found.'));
+      return;
+    }
+    console.log(marked(run.output));
+  });
+
+program
+  .command('bringback')
+  .description('Format latest run as a Host handoff')
+  .option('-m, --mode <mode>', 'raw or smart')
+  .action(async (options) => {
+    try {
+      console.log(await createHandoff({ mode: options.mode }, { caller: 'cli' }));
+    } catch (err: any) {
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
+  });
+
 program
   .command('mcp')
-  .description('Manage the DevDeck MCP Server')
+  .description('Manage DevDeck MCP Server')
   .command('start')
-  .description('Start the DevDeck MCP server (stdio transport)')
+  .description('Start stdio MCP server')
   .action(async () => {
     try {
       await startMcpServer();

@@ -1,0 +1,25 @@
+{
+  "id": "2026-06-17T07-22-46-105Z-htka87",
+  "date": "2026-06-17T07:22:46.105Z",
+  "host": "cli",
+  "mode": "compare",
+  "executor": "mock,mock",
+  "agent": "devdeck",
+  "task": "Compare aggregate handoff smoke",
+  "output": "# DevDeck Compare Result\n\n## mock\n\nMock executor: mock\nMode-compatible role: mock\nTask: Compare aggregate handoff smoke\nContext chars: 56550\n\n## mock\n\nMock executor: mock\nMode-compatible role: mock\nTask: Compare aggregate handoff smoke\nContext chars: 56550\n\n\n\n## Handoff Notes\n\nReview agreement, conflicts, and choose the next Codex action.",
+  "error": "",
+  "exitCode": 0,
+  "contextSummary": {
+    "chars": 340,
+    "resourceCount": 2,
+    "truncated": false,
+    "omitted": []
+  },
+  "budget": {
+    "max": 60000,
+    "actual": 340,
+    "exceeded": false
+  },
+  "jsonPath": "/Users/suxiaohan/Desktop/DevDeck/.devdeck/runs/2026-06-17T07-22-46-105Z-htka87.json",
+  "logPath": "/Users/suxiaohan/Desktop/DevDeck/.devdeck/runs/2026-06-17T07-22-46-105Z-htka87.md"
+}
