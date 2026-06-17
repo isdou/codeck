@@ -162,6 +162,7 @@ export async function routeTask(
       actual: context.summary.chars,
       exceeded: context.summary.chars > maxContext,
     },
+    usage: result.usage,
   });
 
   if (run.exitCode !== 0) {

@@ -140,6 +140,7 @@ export async function routeTask(input, options = {}) {
             actual: context.summary.chars,
             exceeded: context.summary.chars > maxContext,
         },
+        usage: result.usage,
     });
     if (run.exitCode !== 0) {
         const detail = (run.error || run.output || '').trim();

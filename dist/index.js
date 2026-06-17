@@ -63,6 +63,14 @@ function installAntigravityCli() {
     console.log(chalk.green('Installed Antigravity CLI.'));
     console.log(chalk.gray('If first use requires auth, run "agy --print \\"hello\\"" once and complete the browser login.'));
 }
+function printRunSummary(run) {
+    console.log(chalk.gray(`\nExecutor: ${run.executor} | Agent: ${run.agent}`));
+    console.log(chalk.gray(`Run: ${run.id}`));
+    if (run.usage) {
+        const typeLabel = run.usage.estimated ? 'Est.' : 'Exact';
+        console.log(chalk.gray(`Usage: Prompt ${run.usage.promptTokens.toLocaleString()} | Completion ${run.usage.completionTokens.toLocaleString()} tokens | Cost: $${run.usage.estimatedCostUsd.toFixed(5)} (${typeLabel})`));
+    }
+}
 program
     .command('init')
     .description('Initialize Codeck workspace')
@@ -175,8 +183,7 @@ program
         await confirmDangerousExecutor(executor, Boolean(options.yes));
         const run = await routeTask({ mode, executor, task, files: options.file }, { caller: 'cli', allowOverBudget: Boolean(options.fullContext) });
         console.log(run.output);
-        console.log(chalk.gray(`\nExecutor: ${executor}`));
-        console.log(chalk.gray(`Run: ${run.id}`));
+        printRunSummary(run);
     }
     catch (err) {
         console.error(chalk.red(err.message));
@@ -199,7 +206,7 @@ program
         await confirmDangerousExecutor(selectedExecutor, Boolean(options.yes));
         const run = await routeTask({ mode, executor: selectedExecutor, task, files: options.file }, { caller: 'cli', allowOverBudget: Boolean(options.fullContext) });
         console.log(run.output);
-        console.log(chalk.gray(`\nRun: ${run.id}`));
+        printRunSummary(run);
     }
     catch (err) {
         console.error(chalk.red(err.message));
@@ -219,7 +226,7 @@ program
         const selectedExecutor = executor === 'auto' ? pickExecutor(task, 'ask', process.cwd(), 'cli') : executor;
         const run = await routeTask({ mode: 'ask', executor: selectedExecutor, task, files: options.file }, { caller: 'cli', allowOverBudget: Boolean(options.fullContext) });
         console.log(run.output);
-        console.log(chalk.gray(`\nRun: ${run.id}`));
+        printRunSummary(run);
     }
     catch (err) {
         console.error(chalk.red(err.message));
@@ -240,7 +247,7 @@ program
         await confirmDangerousExecutor(selectedExecutor, Boolean(options.yes));
         const run = await routeTask({ mode: 'delegate', executor: selectedExecutor, task, files: options.file }, { caller: 'cli' });
         console.log(run.output);
-        console.log(chalk.gray(`\nRun: ${run.id}`));
+        printRunSummary(run);
     }
     catch (err) {
         console.error(chalk.red(err.message));
