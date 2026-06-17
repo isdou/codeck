@@ -47,6 +47,22 @@ function installGeminiCli() {
     }
     console.log(chalk.green('Installed Gemini CLI.'));
 }
+function installAntigravityCli() {
+    if (commandExists('agy')) {
+        console.log(chalk.green('agy is already installed.'));
+        console.log(chalk.gray('If first use requires auth, run "agy --print \\"hello\\"" once and complete the browser login.'));
+        return;
+    }
+    if (!commandExists('curl') || !commandExists('bash')) {
+        throw new Error('curl and bash are required to install Antigravity CLI.');
+    }
+    const result = spawnSync('bash', ['-lc', 'curl -fsSL https://antigravity.google/cli/install.sh | bash'], { stdio: 'inherit' });
+    if (result.status !== 0) {
+        throw new Error(`Antigravity installer failed with code ${result.status}.`);
+    }
+    console.log(chalk.green('Installed Antigravity CLI.'));
+    console.log(chalk.gray('If first use requires auth, run "agy --print \\"hello\\"" once and complete the browser login.'));
+}
 program
     .command('init')
     .description('Initialize Codeck workspace')
@@ -86,13 +102,18 @@ program
 program
     .command('install')
     .description('Install supported executor CLIs')
-    .argument('<agent>', 'Currently supported: gemini')
+    .argument('<agent>', 'Currently supported: gemini, antigravity')
     .action((agent) => {
     try {
-        if (agent !== 'gemini') {
-            throw new Error('Only "gemini" auto-install is supported.');
+        if (agent === 'gemini') {
+            installGeminiCli();
+            return;
         }
-        installGeminiCli();
+        if (agent === 'antigravity' || agent === 'agy') {
+            installAntigravityCli();
+            return;
+        }
+        throw new Error('Only "gemini" and "antigravity" auto-install are supported.');
     }
     catch (err) {
         console.error(chalk.red(err.message));
@@ -144,6 +165,7 @@ program
     .argument('<task...>', 'Task text')
     .option('-m, --mode <mode>', 'ask, subagent, or delegate', 'ask')
     .option('-f, --file <file...>', 'Files to include')
+    .option('--full-context', 'Use the full context budget for ask mode')
     .option('-y, --yes', 'Confirm writable/shell-enabled executor')
     .action(async (taskParts, options) => {
     try {
@@ -151,7 +173,7 @@ program
         const task = taskFrom(taskParts);
         const executor = pickExecutor(task, mode, process.cwd(), 'cli');
         await confirmDangerousExecutor(executor, Boolean(options.yes));
-        const run = await routeTask({ mode, executor, task, files: options.file }, { caller: 'cli' });
+        const run = await routeTask({ mode, executor, task, files: options.file }, { caller: 'cli', allowOverBudget: Boolean(options.fullContext) });
         console.log(run.output);
         console.log(chalk.gray(`\nExecutor: ${executor}`));
         console.log(chalk.gray(`Run: ${run.id}`));
@@ -168,13 +190,14 @@ program
     .argument('<executor>', 'Executor profile')
     .argument('<task...>', 'Task text')
     .option('-f, --file <file...>', 'Files to include')
+    .option('--full-context', 'Use the full context budget for ask mode')
     .option('-y, --yes', 'Confirm writable/shell-enabled executor')
     .action(async (mode, executor, taskParts, options) => {
     try {
         const task = taskFrom(taskParts);
         const selectedExecutor = executor === 'auto' ? pickExecutor(task, mode, process.cwd(), 'cli') : executor;
         await confirmDangerousExecutor(selectedExecutor, Boolean(options.yes));
-        const run = await routeTask({ mode, executor: selectedExecutor, task, files: options.file }, { caller: 'cli' });
+        const run = await routeTask({ mode, executor: selectedExecutor, task, files: options.file }, { caller: 'cli', allowOverBudget: Boolean(options.fullContext) });
         console.log(run.output);
         console.log(chalk.gray(`\nRun: ${run.id}`));
     }
@@ -189,11 +212,12 @@ program
     .argument('<executor>', 'Executor profile')
     .argument('<task...>', 'Task text')
     .option('-f, --file <file...>', 'Files to include')
+    .option('--full-context', 'Use the full context budget')
     .action(async (executor, taskParts, options) => {
     try {
         const task = taskFrom(taskParts);
         const selectedExecutor = executor === 'auto' ? pickExecutor(task, 'ask', process.cwd(), 'cli') : executor;
-        const run = await routeTask({ mode: 'ask', executor: selectedExecutor, task, files: options.file }, { caller: 'cli' });
+        const run = await routeTask({ mode: 'ask', executor: selectedExecutor, task, files: options.file }, { caller: 'cli', allowOverBudget: Boolean(options.fullContext) });
         console.log(run.output);
         console.log(chalk.gray(`\nRun: ${run.id}`));
     }

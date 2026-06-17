@@ -1,6 +1,8 @@
 # Codeck Usage
 
-When the user asks for analysis, review, comparison, long-context reading, UI feedback, or another model's opinion, use Codeck automatically instead of asking the user to say "use Codeck".
+Use Codeck only when the user explicitly mentions `codeck`, `Gemini`, `Claude`, `Antigravity`, `agy`, or another configured external executor.
+
+Do not use Codeck just because a task looks like analysis, review, comparison, long-context reading, or UI feedback. Codex should not choose another model on the user's behalf.
 
 Default flow:
 

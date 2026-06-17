@@ -102,7 +102,10 @@ export async function routeTask(input, options = {}) {
     if (!agent) {
         throw new CodeckError('agent_not_found', `Agent "${profile.agent}" for executor "${executor}" is not configured.`);
     }
-    const maxContext = options.caller === 'mcp' ? config.budget.mcp_max_context_chars : config.budget.max_context_chars;
+    const maxConfiguredContext = options.caller === 'mcp' ? config.budget.mcp_max_context_chars : config.budget.max_context_chars;
+    const maxContext = input.mode === 'ask' && !input.files?.length && !options.allowOverBudget
+        ? Math.min(config.budget.ask_context_chars, maxConfiguredContext)
+        : maxConfiguredContext;
     const context = buildContext(cwd, { task: input.task, executor: profile, files: input.files, maxChars: maxContext });
     if (context.summary.chars > maxContext && !options.allowOverBudget) {
         throw new CodeckError('budget_exceeded', 'Context exceeds configured budget.', {
@@ -139,7 +142,8 @@ export async function routeTask(input, options = {}) {
         },
     });
     if (run.exitCode !== 0) {
-        throw new CodeckError('executor_failed', `Executor "${executor}" exited with code ${run.exitCode}.`, {
+        const detail = (run.error || run.output || '').trim();
+        throw new CodeckError('executor_failed', `Executor "${executor}" exited with code ${run.exitCode}.${detail ? `\n${detail.slice(0, 1200)}` : ''}`, {
             runId: run.id,
             exitCode: run.exitCode,
             error: run.error,
