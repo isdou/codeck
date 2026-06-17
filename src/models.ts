@@ -10,6 +10,10 @@ export interface AgentConfig {
   command: string;
   adapter?: string;
   prompt_args?: string[];
+  timeout_ms?: number;
+  env?: Record<string, string>;
+  api_key?: string;
+  model?: string;
 }
 
 export interface ExecutorProfile {
@@ -35,6 +39,7 @@ export interface ContextConfig {
 export interface BudgetConfig {
   max_context_chars: number;
   mcp_max_context_chars: number;
+  ask_context_chars: number;
 }
 
 export interface HandoffConfig {

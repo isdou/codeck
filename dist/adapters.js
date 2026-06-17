@@ -39,14 +39,36 @@ function spawnPrompt(agent, promptArgs, prompt, cwd, env = {}) {
         const child = spawn(binary, [...args, ...promptArgs], {
             cwd,
             shell: false,
-            env: { ...process.env, ...env },
+            env: { ...process.env, ...env, ...(agent.env || {}) },
         });
         let output = '';
         let error = '';
+        let settled = false;
+        const timeout = agent.timeout_ms && agent.timeout_ms > 0
+            ? setTimeout(() => {
+                settled = true;
+                child.kill('SIGTERM');
+                resolve({
+                    output,
+                    error: `${error}${error ? '\n' : ''}Timed out after ${agent.timeout_ms}ms.`,
+                    exitCode: 124,
+                });
+            }, agent.timeout_ms)
+            : null;
         child.stdout.on('data', (data) => output += data.toString());
         child.stderr.on('data', (data) => error += data.toString());
-        child.on('error', (err) => reject(new Error(`Failed to start "${binary}": ${err.message}`)));
-        child.on('close', (code) => resolve({ output, error, exitCode: code }));
+        child.on('error', (err) => {
+            if (timeout)
+                clearTimeout(timeout);
+            if (!settled)
+                reject(new Error(`Failed to start "${binary}": ${err.message}`));
+        });
+        child.on('close', (code) => {
+            if (timeout)
+                clearTimeout(timeout);
+            if (!settled)
+                resolve({ output, error, exitCode: code });
+        });
         if (promptArgs.length === 0) {
             child.stdin.write(prompt);
             child.stdin.end();
@@ -116,18 +138,112 @@ export const geminiWebAdapter = {
         };
     },
 };
+export const geminiApiAdapter = {
+    name: 'gemini_api',
+    capabilities: { text: true, file: true, image: false, document: true, writeFiles: false, runShell: false },
+    probe(agent) {
+        const key = agent.api_key || process.env.GEMINI_API_KEY;
+        return key
+            ? { ok: true, message: 'Gemini API key is configured.' }
+            : { ok: false, message: 'Gemini API key not found. Set GEMINI_API_KEY in .env or config.toml.' };
+    },
+    async invoke(input) {
+        const key = input.agent.api_key || process.env.GEMINI_API_KEY;
+        if (!key) {
+            return { output: '', error: 'Gemini API Key is missing. Please set GEMINI_API_KEY.', exitCode: 1 };
+        }
+        const model = input.agent.model || 'gemini-2.5-flash';
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+        const prompt = buildPrompt(input);
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                }),
+            });
+            if (!response.ok) {
+                const errText = await response.text();
+                return { output: '', error: `Gemini API request failed (${response.status}): ${errText}`, exitCode: 1 };
+            }
+            const data = (await response.json());
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!text) {
+                return { output: '', error: `Invalid Gemini API response: ${JSON.stringify(data)}`, exitCode: 1 };
+            }
+            return { output: text, error: '', exitCode: 0 };
+        }
+        catch (err) {
+            return { output: '', error: `Gemini API execution error: ${err.message}`, exitCode: 1 };
+        }
+    },
+};
+export const claudeApiAdapter = {
+    name: 'claude_api',
+    capabilities: { text: true, file: true, image: false, document: true, writeFiles: false, runShell: false },
+    probe(agent) {
+        const key = agent.api_key || process.env.ANTHROPIC_API_KEY;
+        return key
+            ? { ok: true, message: 'Anthropic API key is configured.' }
+            : { ok: false, message: 'Anthropic API key not found. Set ANTHROPIC_API_KEY in .env or config.toml.' };
+    },
+    async invoke(input) {
+        const key = input.agent.api_key || process.env.ANTHROPIC_API_KEY;
+        if (!key) {
+            return { output: '', error: 'Anthropic API Key is missing. Please set ANTHROPIC_API_KEY.', exitCode: 1 };
+        }
+        const model = input.agent.model || 'claude-3-5-sonnet-latest';
+        const url = 'https://api.anthropic.com/v1/messages';
+        const prompt = buildPrompt(input);
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'x-api-key': key,
+                    'anthropic-version': '2023-06-01',
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model,
+                    max_tokens: 4096,
+                    messages: [{ role: 'user', content: prompt }],
+                }),
+            });
+            if (!response.ok) {
+                const errText = await response.text();
+                return { output: '', error: `Anthropic API request failed (${response.status}): ${errText}`, exitCode: 1 };
+            }
+            const data = (await response.json());
+            const text = data.content?.[0]?.text;
+            if (!text) {
+                return { output: '', error: `Invalid Anthropic API response: ${JSON.stringify(data)}`, exitCode: 1 };
+            }
+            return { output: text, error: '', exitCode: 0 };
+        }
+        catch (err) {
+            return { output: '', error: `Anthropic API execution error: ${err.message}`, exitCode: 1 };
+        }
+    },
+};
 export function getAdapter(name) {
     switch ((name || 'generic').toLowerCase()) {
         case 'mock':
             return mockAdapter;
         case 'gemini_web':
             return geminiWebAdapter;
+        case 'gemini_api':
+            return geminiApiAdapter;
+        case 'claude_api':
+            return claudeApiAdapter;
         case 'claude':
             return makeCliAdapter('claude', ['-p', '{prompt}'], { text: true, file: true, image: false, document: true, writeFiles: false, runShell: false });
         case 'gemini':
             return makeCliAdapter('gemini', ['--skip-trust', '--approval-mode', 'plan', '--output-format', 'text', '-p', '{prompt}'], { text: true, file: true, image: true, document: true, writeFiles: false, runShell: false }, {
                 GEMINI_CLI_TRUST_WORKSPACE: 'true',
             });
+        case 'antigravity':
+            return makeCliAdapter('antigravity', ['--sandbox', '--print-timeout', '45s', '--print', '{prompt}'], { text: true, file: true, image: false, document: true, writeFiles: false, runShell: false });
         case 'codex':
             return makeCliAdapter('codex', ['exec', '{prompt}'], { text: true, file: true, image: false, document: true, writeFiles: true, runShell: true });
         default:

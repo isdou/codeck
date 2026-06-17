@@ -27,6 +27,7 @@ export async function startMcpServer() {
                         executor: { type: "string", description: "Executor profile name, or auto." },
                         task: { type: "string", description: "Explicit current task. Required." },
                         files: { type: "array", items: { type: "string" }, description: "Optional files to include." },
+                        fullContext: { type: "boolean", description: "Use full context budget instead of the smaller ask budget." },
                         handoffMode: { type: "string", enum: ["raw", "smart"], description: "Optional handoff mode." },
                     },
                     required: ["mode", "task"],
@@ -134,7 +135,8 @@ export async function startMcpServer() {
         try {
             switch (name) {
                 case "route_task": {
-                    const run = await routeTask(args, { caller: 'mcp' });
+                    const { fullContext, ...input } = args;
+                    const run = await routeTask(input, { caller: 'mcp', allowOverBudget: Boolean(fullContext) });
                     return text(JSON.stringify(run, null, 2));
                 }
                 case "pick_executor": {
