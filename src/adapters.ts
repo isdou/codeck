@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import { spawnSync } from 'child_process';
-import type { AdapterCapabilities, AgentConfig, BuiltContext, ExecutorProfile, RunRecord } from './models.js';
+import type { AdapterCapabilities, AgentConfig, BuiltContext, ExecutorProfile, RunRecord, RunUsage } from './models.js';
 
 export interface AdapterInvokeInput {
   agentName: string;
@@ -15,6 +15,7 @@ export interface AdapterInvokeResult {
   output: string;
   error: string;
   exitCode: number | null;
+  usage?: RunUsage;
 }
 
 export interface AgentAdapter {
@@ -22,6 +23,59 @@ export interface AgentAdapter {
   capabilities: AdapterCapabilities;
   probe(agent: AgentConfig): { ok: boolean; message: string };
   invoke(input: AdapterInvokeInput): Promise<AdapterInvokeResult>;
+}
+
+interface ModelPricing {
+  inputCostPerM: number;
+  outputCostPerM: number;
+}
+
+const MODEL_PRICING: Record<string, ModelPricing> = {
+  'gemini-2.5-flash': { inputCostPerM: 0.075, outputCostPerM: 0.30 },
+  'gemini-2.5-pro': { inputCostPerM: 1.25, outputCostPerM: 5.00 },
+  'claude-3-5-sonnet-latest': { inputCostPerM: 3.00, outputCostPerM: 15.00 },
+  'claude-3-5-sonnet-20241022': { inputCostPerM: 3.00, outputCostPerM: 15.00 },
+  'claude-3-opus-latest': { inputCostPerM: 15.00, outputCostPerM: 75.00 },
+  'claude': { inputCostPerM: 3.00, outputCostPerM: 15.00 },
+  'gemini': { inputCostPerM: 0.075, outputCostPerM: 0.30 },
+  'antigravity': { inputCostPerM: 0.075, outputCostPerM: 0.30 },
+};
+
+export function getPricing(modelOrAgent: string): ModelPricing {
+  const norm = modelOrAgent.toLowerCase();
+  for (const [key, pricing] of Object.entries(MODEL_PRICING)) {
+    if (norm.includes(key)) return pricing;
+  }
+  return MODEL_PRICING['gemini-2.5-flash'];
+}
+
+export function calculateUsage(
+  promptText: string,
+  outputText: string,
+  modelOrAgent: string,
+  exactPromptTokens?: number,
+  exactCompletionTokens?: number,
+): RunUsage {
+  const estimated = exactPromptTokens === undefined || exactCompletionTokens === undefined;
+  
+  const promptTokens = exactPromptTokens !== undefined 
+    ? exactPromptTokens 
+    : Math.ceil(promptText.length / 3.5);
+  
+  const completionTokens = exactCompletionTokens !== undefined
+    ? exactCompletionTokens
+    : Math.ceil(outputText.length / 3.5);
+
+  const pricing = getPricing(modelOrAgent);
+  const estimatedCostUsd = ((promptTokens * pricing.inputCostPerM) + (completionTokens * pricing.outputCostPerM)) / 1000000;
+
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens: promptTokens + completionTokens,
+    estimatedCostUsd,
+    estimated,
+  };
 }
 
 function splitCommand(command: string): { binary: string; args: string[] } {
@@ -77,10 +131,12 @@ function spawnPrompt(agent: AgentConfig, promptArgs: string[], prompt: string, c
       ? setTimeout(() => {
         settled = true;
         child.kill('SIGTERM');
+        const usage = calculateUsage(prompt, output, agent.model || agent.adapter || agent.command);
         resolve({
           output,
           error: `${error}${error ? '\n' : ''}Timed out after ${agent.timeout_ms}ms.`,
           exitCode: 124,
+          usage,
         });
       }, agent.timeout_ms)
       : null;
@@ -92,7 +148,10 @@ function spawnPrompt(agent: AgentConfig, promptArgs: string[], prompt: string, c
     });
     child.on('close', (code) => {
       if (timeout) clearTimeout(timeout);
-      if (!settled) resolve({ output, error, exitCode: code });
+      if (!settled) {
+        const usage = calculateUsage(prompt, output, agent.model || agent.adapter || agent.command);
+        resolve({ output, error, exitCode: code, usage });
+      }
     });
 
     if (promptArgs.length === 0) {
@@ -126,15 +185,19 @@ export const mockAdapter: AgentAdapter = {
     return { ok: true, message: 'mock adapter ready' };
   },
   async invoke(input) {
+    const output = [
+      `Mock executor: ${input.executorName}`,
+      `Mode-compatible role: ${input.profile.role}`,
+      `Task: ${input.task}`,
+      `Context chars: ${input.context.summary.chars}`,
+    ].join('\n');
+    const prompt = buildPrompt(input);
+    const usage = calculateUsage(prompt, output, 'mock');
     return {
-      output: [
-        `Mock executor: ${input.executorName}`,
-        `Mode-compatible role: ${input.profile.role}`,
-        `Task: ${input.task}`,
-        `Context chars: ${input.context.summary.chars}`,
-      ].join('\n'),
+      output,
       error: '',
       exitCode: 0,
+      usage,
     };
   },
 };
@@ -204,7 +267,11 @@ export const geminiApiAdapter: AgentAdapter = {
       if (!text) {
         return { output: '', error: `Invalid Gemini API response: ${JSON.stringify(data)}`, exitCode: 1 };
       }
-      return { output: text, error: '', exitCode: 0 };
+      const usageMetadata = data.usageMetadata;
+      const exactPrompt = usageMetadata?.promptTokenCount;
+      const exactCompletion = usageMetadata?.candidatesTokenCount;
+      const usage = calculateUsage(prompt, text, model, exactPrompt, exactCompletion);
+      return { output: text, error: '', exitCode: 0, usage };
     } catch (err: any) {
       return { output: '', error: `Gemini API execution error: ${err.message}`, exitCode: 1 };
     }
@@ -254,7 +321,11 @@ export const claudeApiAdapter: AgentAdapter = {
       if (!text) {
         return { output: '', error: `Invalid Anthropic API response: ${JSON.stringify(data)}`, exitCode: 1 };
       }
-      return { output: text, error: '', exitCode: 0 };
+      const usageMetadata = data.usage;
+      const exactPrompt = usageMetadata?.input_tokens;
+      const exactCompletion = usageMetadata?.output_tokens;
+      const usage = calculateUsage(prompt, text, model, exactPrompt, exactCompletion);
+      return { output: text, error: '', exitCode: 0, usage };
     } catch (err: any) {
       return { output: '', error: `Anthropic API execution error: ${err.message}`, exitCode: 1 };
     }
@@ -287,6 +358,15 @@ export function getAdapter(name: string | undefined): AgentAdapter {
 }
 
 export function formatRunMarkdown(run: RunRecord): string {
+  const usageLines = run.usage
+    ? [
+        `- Prompt Tokens: ${run.usage.promptTokens} (${run.usage.estimated ? 'estimated' : 'exact'})`,
+        `- Completion Tokens: ${run.usage.completionTokens} (${run.usage.estimated ? 'estimated' : 'exact'})`,
+        `- Total Tokens: ${run.usage.totalTokens}`,
+        `- Estimated Cost: $${run.usage.estimatedCostUsd.toFixed(5)} USD`,
+      ]
+    : [];
+
   return [
     `# Codeck Run ${run.id}`,
     `- Date: ${run.date}`,
@@ -296,6 +376,7 @@ export function formatRunMarkdown(run: RunRecord): string {
     `- Agent: \`${run.agent}\``,
     `- Exit Code: ${run.exitCode}`,
     `- Context Chars: ${run.contextSummary.chars}`,
+    ...usageLines,
     ``,
     `## Task`,
     '```text',

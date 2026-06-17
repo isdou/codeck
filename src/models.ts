@@ -110,6 +110,14 @@ export interface CompareExecutorsInput {
   files?: string[];
 }
 
+export interface RunUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+  estimated: boolean;
+}
+
 export interface RunRecord {
   id: string;
   date: string;
@@ -129,6 +137,7 @@ export interface RunRecord {
     actual: number;
     exceeded: boolean;
   };
+  usage?: RunUsage;
 }
 
 export interface AdapterCapabilities {
