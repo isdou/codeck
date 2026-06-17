@@ -1,0 +1,14 @@
+[agents.codex]
+command = "codex"
+
+[agents.claude]
+command = "claude"
+
+[agents.gemini]
+command = "gemini"
+
+[context]
+include_git_diff = true
+include_readme = true
+include_agent_files = true
+max_files = 12
