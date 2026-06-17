@@ -70,12 +70,17 @@ npm link
 
 安装完成后，你可以在终端直接运行 `devdeck` 命令。
 
+> 💡 **安装提示与常见问题**
+> - **权限报错**：如果在执行 `npm link` 时遇到 `EACCES` 权限错误，请尝试使用管理员权限：`sudo npm link --unsafe-perm`，或直接通过本地路径运行命令绕过全局链接：`node dist/index.js <command>`。
+> - **沙箱与安全终止**：在某些 AI 代理执行环境（如 Cursor/Codex 的 Terminal 沙箱）或特定系统限制下，直接执行二进制或软链接脚本可能被系统安全策略直接终止（例如触发内核的 `SIGKILL 137` 信号退出）。此时，可以使用 Node 显式启动：`node dist/index.js <command>`。
+
 ### 2. 初始化工作区
 
 在你要开发的软件项目根目录下运行：
 
 ```bash
 devdeck init
+# 如果未全局 link，请使用：node /path/to/DevDeck/dist/index.js init
 ```
 
 此命令会在当前目录创建 `.devdeck/` 文件夹，包含初始配置文件 `config.toml`，以及项目描述 `project.md` 和开发约束 `constraints.md`。
@@ -86,22 +91,57 @@ devdeck init
 
 ```bash
 devdeck doctor
+# 如果未全局 link，请使用：node /path/to/DevDeck/dist/index.js doctor
 ```
 
 它会扫描你的 PATH 环境变量并检查 `claude`、`gemini`、`codex` 等 CLI 的可用性。
 
-### 4. 开启 MCP 服务
+### 4. 开启 MCP 服务与集成
 
-DevDeck 提供了符合 Model Context Protocol 规范的 Stdio 服务。你可以将它配置到你的 Codex、Cursor 或 Claude Desktop 中。
+DevDeck 提供了符合 Model Context Protocol (MCP) 规范的 Stdio 服务。你可以方便地将其配置到各类支持 MCP 的客户端中。
 
 #### 启动 MCP 服务命令：
 ```bash
 devdeck mcp start
+# 或者使用绝对路径避免环境差异：
+node /path/to/DevDeck/dist/index.js mcp start
 ```
 
-#### 在 Codex 中添加服务：
+#### 各客户端配置参考：
+
+##### 在 Codex 中通过命令行一键添加：
 ```bash
 codex mcp add devdeck -- devdeck mcp start
+# 或者指定绝对路径：
+codex mcp add devdeck -- node /path/to/DevDeck/dist/index.js mcp start
+```
+
+##### 在 Cursor / Claude Desktop / VS Code MCP 插件中配置 (JSON)：
+- **使用全局 `devdeck` 命令**（需先成功执行 `npm link`）：
+```json
+{
+  "mcpServers": {
+    "devdeck": {
+      "command": "devdeck",
+      "args": ["mcp", "start"]
+    }
+  }
+}
+```
+- **使用绝对路径配置**（推荐，可完美避开环境变量与路径找不到的问题）：
+```json
+{
+  "mcpServers": {
+    "devdeck": {
+      "command": "node",
+      "args": [
+        "/Users/您的用户名/Desktop/DevDeck/dist/index.js",
+        "mcp",
+        "start"
+      ]
+    }
+  }
+}
 ```
 
 ---
