@@ -46,7 +46,7 @@ export async function runAgent(
 }
 
 export function createHandoffPrompt(lastOutput: string): string {
-  if (!lastOutput.trim()) return 'No previous DevDeck run is available.';
+  if (!lastOutput.trim()) return 'No previous Codeck run is available.';
   return [
     '=== DEVDECK RAW HANDOFF ===',
     '## Key Source Output',

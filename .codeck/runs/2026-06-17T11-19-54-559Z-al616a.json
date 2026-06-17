@@ -1,0 +1,25 @@
+{
+  "id": "2026-06-17T11-19-54-559Z-al616a",
+  "date": "2026-06-17T11:19:54.559Z",
+  "host": "cli",
+  "mode": "ask",
+  "executor": "mock",
+  "agent": "mock",
+  "task": "install smoke",
+  "output": "Mock executor: mock\nMode-compatible role: mock\nTask: install smoke\nContext chars: 57875",
+  "error": "",
+  "exitCode": 0,
+  "contextSummary": {
+    "chars": 57875,
+    "resourceCount": 15,
+    "truncated": false,
+    "omitted": []
+  },
+  "budget": {
+    "max": 60000,
+    "actual": 57875,
+    "exceeded": false
+  },
+  "jsonPath": "/Users/suxiaohan/Desktop/DevDeck/.devdeck/runs/2026-06-17T11-19-54-559Z-al616a.json",
+  "logPath": "/Users/suxiaohan/Desktop/DevDeck/.devdeck/runs/2026-06-17T11-19-54-559Z-al616a.md"
+}

@@ -1,11 +1,11 @@
 {
-  "name": "devdeck",
+  "name": "codeck",
   "version": "0.1.0",
-  "description": "DevDeck: Local MCP Server & CLI context handoff bridge for Codex, Claude Code, and Gemini CLI.",
+  "description": "Codeck: Local MCP Server & CLI context handoff bridge for Codex, Claude Code, and Gemini CLI.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "devdeck": "./dist/index.js"
+    "codeck": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",

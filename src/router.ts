@@ -1,11 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { getAdapter, formatRunMarkdown } from './adapters.js';
-import { getDevDeckDir, loadConfig } from './config.js';
+import { getCodeckDir, loadConfig } from './config.js';
 import { buildContext } from './context.js';
-import type { CompareExecutorsInput, HandoffMode, RouteTaskInput, RunRecord } from './models.js';
+import type { CompareExecutorsInput, Config, HandoffMode, RouteMode, RouteRule, RouteTaskInput, RunRecord } from './models.js';
 
-export class DevDeckError extends Error {
+export class CodeckError extends Error {
   constructor(public code: string, message: string, public details: Record<string, unknown> = {}) {
     super(message);
   }
@@ -16,7 +16,7 @@ function runId(): string {
 }
 
 function runsDir(cwd: string): string {
-  return path.join(getDevDeckDir(cwd), 'runs');
+  return path.join(getCodeckDir(cwd), 'runs');
 }
 
 function latestRunJson(cwd: string): string | null {
@@ -33,7 +33,7 @@ function saveRun(cwd: string, run: Omit<RunRecord, 'logPath' | 'jsonPath'>): Run
   const fullRun: RunRecord = { ...run, jsonPath, logPath };
   fs.writeFileSync(jsonPath, JSON.stringify(fullRun, null, 2), 'utf8');
   fs.writeFileSync(logPath, formatRunMarkdown(fullRun), 'utf8');
-  fs.writeFileSync(path.join(getDevDeckDir(cwd), 'last.md'), fullRun.output, 'utf8');
+  fs.writeFileSync(path.join(getCodeckDir(cwd), 'last.md'), fullRun.output, 'utf8');
   return fullRun;
 }
 
@@ -45,8 +45,49 @@ export function getRun(runIdValue?: string, cwd: string = process.cwd()): RunRec
 
 function assertTask(task: string | undefined): asserts task is string {
   if (!task || !task.trim()) {
-    throw new DevDeckError('current_task_required', 'DevDeck requires an explicit current task.');
+    throw new CodeckError('current_task_required', 'Codeck requires an explicit current task.');
   }
+}
+
+function matchesRule(rule: RouteRule, task: string): boolean {
+  const normalized = task.toLowerCase();
+  return rule.keywords.some((keyword) => keyword && normalized.includes(keyword.toLowerCase()));
+}
+
+function canUseExecutor(config: Config, executor: string, mode: RouteMode, caller?: 'cli' | 'mcp'): boolean {
+  const profile = config.executors[executor];
+  if (!profile || !profile.allowed_modes.includes(mode)) return false;
+  return !(caller === 'mcp' && (profile.write_files || profile.run_shell));
+}
+
+export function resolveExecutor(
+  config: Config,
+  task: string,
+  mode: RouteMode,
+  caller?: 'cli' | 'mcp',
+): string {
+  for (const rule of config.routing.rules) {
+    if (matchesRule(rule, task) && canUseExecutor(config, rule.executor, mode, caller)) {
+      return rule.executor;
+    }
+  }
+
+  if (canUseExecutor(config, config.routing.default_executor, mode, caller)) {
+    return config.routing.default_executor;
+  }
+
+  const fallback = Object.keys(config.executors).find((executor) => canUseExecutor(config, executor, mode, caller));
+  if (fallback) return fallback;
+
+  throw new CodeckError('executor_not_found', `No executor is available for mode "${mode}".`, {
+    mode,
+    caller,
+  });
+}
+
+export function pickExecutor(task: string, mode: RouteMode = 'ask', cwd: string = process.cwd(), caller?: 'cli' | 'mcp'): string {
+  assertTask(task);
+  return resolveExecutor(loadConfig(cwd), task, mode, caller);
 }
 
 export async function routeTask(
@@ -57,30 +98,34 @@ export async function routeTask(
   const config = loadConfig(cwd);
   assertTask(input.task);
 
-  const profile = config.executors[input.executor];
+  const executor = input.executor && input.executor !== 'auto'
+    ? input.executor
+    : resolveExecutor(config, input.task, input.mode, options.caller);
+
+  const profile = config.executors[executor];
   if (!profile) {
-    throw new DevDeckError('executor_not_found', `Executor "${input.executor}" is not configured.`, {
+    throw new CodeckError('executor_not_found', `Executor "${executor}" is not configured.`, {
       executors: Object.keys(config.executors),
     });
   }
   if (!profile.allowed_modes.includes(input.mode)) {
-    throw new DevDeckError('mode_not_allowed', `Executor "${input.executor}" does not allow mode "${input.mode}".`, {
+    throw new CodeckError('mode_not_allowed', `Executor "${executor}" does not allow mode "${input.mode}".`, {
       allowed_modes: profile.allowed_modes,
     });
   }
   if ((profile.write_files || profile.run_shell) && options.caller === 'mcp') {
-    throw new DevDeckError('permission_requires_cli_confirmation', 'MCP calls cannot auto-run writable or shell-enabled executors.');
+    throw new CodeckError('permission_requires_cli_confirmation', 'MCP calls cannot auto-run writable or shell-enabled executors.');
   }
 
   const agent = config.agents[profile.agent];
   if (!agent) {
-    throw new DevDeckError('agent_not_found', `Agent "${profile.agent}" for executor "${input.executor}" is not configured.`);
+    throw new CodeckError('agent_not_found', `Agent "${profile.agent}" for executor "${executor}" is not configured.`);
   }
 
   const maxContext = options.caller === 'mcp' ? config.budget.mcp_max_context_chars : config.budget.max_context_chars;
   const context = buildContext(cwd, { task: input.task, executor: profile, files: input.files, maxChars: maxContext });
   if (context.summary.chars > maxContext && !options.allowOverBudget) {
-    throw new DevDeckError('budget_exceeded', 'Context exceeds configured budget.', {
+    throw new CodeckError('budget_exceeded', 'Context exceeds configured budget.', {
       actual: context.summary.chars,
       max: maxContext,
       omitted: context.summary.omitted,
@@ -91,7 +136,7 @@ export async function routeTask(
   const result = await adapter.invoke({
     agentName: profile.agent,
     agent,
-    executorName: input.executor,
+    executorName: executor,
     profile,
     task: input.task,
     context,
@@ -102,7 +147,7 @@ export async function routeTask(
     date: new Date().toISOString(),
     host: input.host || (options.caller === 'cli' ? 'cli' : 'codex'),
     mode: input.mode,
-    executor: input.executor,
+    executor,
     agent: profile.agent,
     task: input.task,
     output: result.output,
@@ -117,7 +162,7 @@ export async function routeTask(
   });
 
   if (run.exitCode !== 0) {
-    throw new DevDeckError('executor_failed', `Executor "${input.executor}" exited with code ${run.exitCode}.`, {
+    throw new CodeckError('executor_failed', `Executor "${executor}" exited with code ${run.exitCode}.`, {
       runId: run.id,
       exitCode: run.exitCode,
       error: run.error,
@@ -153,7 +198,7 @@ export async function compareExecutors(
   }
 
   const output = [
-    '# DevDeck Compare Result',
+    '# Codeck Compare Result',
     ...runs.map((run) => `## ${run.executor}\n\n${run.output.trim() || '(no output)'}`),
     ...errors,
     '',
@@ -167,7 +212,7 @@ export async function compareExecutors(
     host: input.host || (options.caller === 'cli' ? 'cli' : 'codex'),
     mode: 'compare',
     executor: input.executors.join(','),
-    agent: 'devdeck',
+    agent: 'codeck',
     task: input.task,
     output,
     error: errors.join('\n'),
@@ -210,12 +255,12 @@ export async function createHandoff(
   const cwd = options.cwd || process.cwd();
   const config = loadConfig(cwd);
   const run = getRun(input.runId, cwd);
-  if (!run) return 'No previous DevDeck run is available.';
+  if (!run) return 'No previous Codeck run is available.';
 
   const mode = input.mode || config.handoff.default_mode;
   if (mode === 'raw') return createRawHandoff(run);
   if (!config.handoff.smart_enabled) {
-    throw new DevDeckError('smart_handoff_disabled', 'Smart handoff is disabled in config.');
+    throw new CodeckError('smart_handoff_disabled', 'Smart handoff is disabled in config.');
   }
 
   const smartRun = await routeTask({
@@ -223,7 +268,7 @@ export async function createHandoff(
     mode: 'ask',
     executor: config.handoff.handoff_executor,
     task: [
-      'Convert this DevDeck executor output into a Host-ready handoff.',
+      'Convert this Codeck executor output into a Host-ready handoff.',
       'Include: key judgment, executable next steps, do-not-change scope, project constraint conflicts, and a continuation prompt.',
       '',
       run.output,

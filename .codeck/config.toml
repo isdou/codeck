@@ -1,0 +1,32 @@
+[agents.codex]
+command = "codex"
+
+[agents.claude]
+command = "claude"
+
+[agents.gemini]
+command = "gemini"
+
+[context]
+include_git_diff = true
+include_readme = true
+include_agent_files = true
+max_files = 12
+
+[routing]
+default_executor = "gemini"
+
+[[routing.rules]]
+name = "frontend"
+executor = "gemini_frontend"
+keywords = ["frontend", "ui", "css", "react", "vue", "页面", "界面", "样式", "截图"]
+
+[[routing.rules]]
+name = "architecture"
+executor = "claude_architect"
+keywords = ["architecture", "architect", "review", "risk", "架构", "评审", "风险", "重构"]
+
+[[routing.rules]]
+name = "implementation"
+executor = "codex_implementer"
+keywords = ["implement", "fix", "test", "build", "实现", "修复", "测试", "构建"]
