@@ -1,297 +1,216 @@
-# DevDeck: Codex-first Local AI CLI Router
+# Codeck
 
-> 🚀 **DevDeck** 是一款面向开发者与 Codex / Claude Code 等 IDE AI 助手的 **本地 AI CLI 路由服务与上下文传递桥梁**。它能够将上游 AI 的复杂子任务路由分发给合适的本地 AI 命令行工具（如 Claude Code, Gemini CLI, Aider, Codex CLI 等），并提供智能上下文组装、执行日志记录以及工作流结果回传（Handoff）。
+Codeck 是一个本地 AI CLI 路由器与上下文助手。它可以接入 Codex MCP，把当前项目上下文打包后交给 Gemini CLI、Claude Code、Codex CLI 等本地 executor 处理。
 
----
+## 简介
 
-## 目录
-1. [核心特性](#核心特性)
-2. [工作流程与架构](#工作流程与架构)
-3. [快速开始](#快速开始)
-4. [配置文件说明 (.devdeck/config.toml)](#配置文件说明-devdeckconfigtoml)
-5. [工作区目录结构 (.devdeck/)](#工作区目录结构-devdeck)
-6. [命令行 CLI 使用指南](#命令行-cli-使用指南)
-7. [MCP 服务与工具参考](#mcp-服务与工具参考)
-8. [安全防护与隔离机制](#安全防护与隔离机制)
+不同 AI 工具适合不同任务：Codex 适合执行代码改动，Claude 常用于架构分析和代码评审，Gemini 适合长上下文、文档和视觉相关任务。
 
----
+Codeck 解决的是切换工具时反复复制代码、解释项目背景、同步当前 diff 和限制条件的问题。你可以继续在 Codex 里工作，只把特定任务路由给更合适的 executor。
 
-## 核心特性
+## 特性
 
-- 🧩 **多 Agent 路由分发 (Routing)**：支持将任务智能路由到不同的本地 AI CLI（如 `claude`、`gemini` 等），使最合适的工具做最合适的事。
-- 📦 **智能上下文组装 (Context Packing)**：自动扫描项目结构，整合指定文件、Git 差异、README 以及自定义的项目概述与约束规范，自动计算并打包为最契合目标工具的 prompt。
-- 🛡️ **运行预算守卫 (Budget Guard)**：提供硬性的字符数/Token 限制（区分 CLI 模式和 MCP 模式），防止超出上下文窗口导致高额成本或调用失败。
-- 📊 **多模型并行对比 (Executor Compare)**：支持让多个本地 AI 模型在完全一致的上下文环境下，顺序执行同一任务，直观输出对比结果。
-- 🔄 **智能状态回传 (Handoff)**：支持 `raw` 原始回传或使用配置的 `handoff_executor` 进行 `smart` 智能格式化整理，保证宿主工作流无缝承接子任务的输出。
-- 🔒 **严格的安全隔离**：MCP 模式下默认拦截所有涉及写文件 (`write_files`) 或运行 Shell 命令 (`run_shell`) 的危险执行器，必须在本地终端 (CLI) 进行手动二次确认。
+- 自动打包项目上下文和配置说明，并记录运行日志。
+- 通过 MCP 接入 Codex，减少手动复制粘贴。
+- 支持 `ask`、`delegate`、`compare` 等路由模式。
+- 支持 Gemini、Claude、Codex 以及本地调试用 `mock` executor。
+- 提供 `gemini_web` 模式，复用网页版 Gemini 的登录态和额度。
 
----
+## 安装
 
-## 工作流程与架构
-
-```text
-Host (Codex/Claude Code)
-  │
-  ├──► 发起 MCP 调用 (e.g. route_task)
-  │      │
-  │      ▼
-  │   DevDeck Router (路由中心)
-  │      │
-  │      ├─► Context Builder (上下文构建器，合并 git diff / 配置文件)
-  │      ├─► Budget Guard (上下文容量限额拦截)
-  │      ▼
-  │   Executor Adapter (适配器层，拼装 Prompt 并执行本地 CLI: claude/gemini)
-  │      │
-  │      ▼
-  │   Run Log (生成本地 .json / .md 日志)
-  │      │
-  │      ▼
-  └──◄ Handoff (将执行结果回传至宿主)
-```
-
----
-
-## 快速开始
-
-### 1. 安装与构建
-
-克隆仓库到本地，并在项目根目录下进行依赖安装与构建：
+确保本地已安装 Node.js。拉取仓库后，在项目根目录执行：
 
 ```bash
-# 安装依赖
 npm install
-
-# 编译 TypeScript 源码为 JavaScript
 npm run build
-
-# 将 devdeck 命令链接到全局
 npm link
 ```
 
-安装完成后，你可以在终端直接运行 `devdeck` 命令。
-
-> 💡 **安装提示与常见问题**
-> - **权限报错**：如果在执行 `npm link` 时遇到 `EACCES` 权限错误，请尝试使用管理员权限：`sudo npm link --unsafe-perm`，或直接通过本地路径运行命令绕过全局链接：`node dist/index.js <command>`。
-> - **沙箱与安全终止**：在某些 AI 代理执行环境（如 Cursor/Codex 的 Terminal 沙箱）或特定系统限制下，直接执行二进制或软链接脚本可能被系统安全策略直接终止（例如触发内核的 `SIGKILL 137` 信号退出）。此时，可以使用 Node 显式启动：`node dist/index.js <command>`。
-
-### 2. 初始化工作区
-
-在你要开发的软件项目根目录下运行：
+检查安装状态：
 
 ```bash
-devdeck init
-# 如果未全局 link，请使用：node /path/to/DevDeck/dist/index.js init
+codeck doctor
 ```
 
-此命令会在当前目录创建 `.devdeck/` 文件夹，包含初始配置文件 `config.toml`，以及项目描述 `project.md` 和开发约束 `constraints.md`。
-
-### 3. 诊断与环境检查
-
-执行 `doctor` 指令检查已配置的本地 AI 命令行工具是否就绪：
+如果本机没有 Gemini CLI，可以让 Codeck 尝试安装：
 
 ```bash
-devdeck doctor
-# 如果未全局 link，请使用：node /path/to/DevDeck/dist/index.js doctor
+codeck install gemini
 ```
 
-它会扫描你的 PATH 环境变量并检查 `claude`、`gemini`、`codex` 等 CLI 的可用性。
+## 快速开始
 
-### 4. 开启 MCP 服务与集成
+初始化当前项目的 Codeck 配置：
 
-DevDeck 提供了符合 Model Context Protocol (MCP) 规范的 Stdio 服务。你可以方便地将其配置到各类支持 MCP 的客户端中。
-
-#### 启动 MCP 服务命令：
 ```bash
-devdeck mcp start
-# 或者使用绝对路径避免环境差异：
-node /path/to/DevDeck/dist/index.js mcp start
+codeck init
 ```
 
-#### 各客户端配置参考：
+查看可用 executor：
 
-##### 在 Codex 中通过命令行一键添加：
 ```bash
-codex mcp add devdeck -- devdeck mcp start
-# 或者指定绝对路径：
-codex mcp add devdeck -- node /path/to/DevDeck/dist/index.js mcp start
+codeck list
 ```
 
-##### 在 Cursor / Claude Desktop / VS Code MCP 插件中配置 (JSON)：
-- **使用全局 `devdeck` 命令**（需先成功执行 `npm link`）：
-```json
-{
-  "mcpServers": {
-    "devdeck": {
-      "command": "devdeck",
-      "args": ["mcp", "start"]
-    }
-  }
-}
-```
-- **使用绝对路径配置**（推荐，可完美避开环境变量与路径找不到的问题）：
-```json
-{
-  "mcpServers": {
-    "devdeck": {
-      "command": "node",
-      "args": [
-        "/Users/您的用户名/Desktop/DevDeck/dist/index.js",
-        "mcp",
-        "start"
-      ]
-    }
-  }
-}
+预览一个任务会分给哪个 executor：
+
+```bash
+codeck pick "review 当前架构风险"
 ```
 
----
+按配置自动选择 executor 并运行：
 
-## 配置文件说明 (`.devdeck/config.toml`)
+```bash
+codeck auto "这个页面 UI 样式不对"
+```
 
-项目初始化的配置文件包含了代理（`agents`）、执行器配置（`executors`）以及限制策略。你可以根据需求自由扩展：
+向 Gemini 发起一次只读任务：
+
+```bash
+codeck ask gemini "简单回答：Codeck smoke test"
+```
+
+对比多个 executor 的建议：
+
+```bash
+codeck compare claude_architect,gemini_frontend "评审这个方案的主要风险"
+```
+
+## Codex MCP 接入
+
+推荐用绝对路径接入 Codex，避免环境变量差异导致命令不可用：
+
+```bash
+codex mcp add codeck -- node /Users/suxiaohan/Desktop/codeck/dist/index.js mcp start
+```
+
+检查接入状态：
+
+```bash
+codex mcp get codeck
+```
+
+配置好 MCP 和项目指令后，日常可以直接描述任务：
+
+```text
+帮我分析当前实现有没有明显问题。
+```
+
+Codex 可以按 `AGENTS.md` 的规则自动调用 Codeck。需要手动指定时，也可以直接传 `auto`：
+
+```text
+调用 Codeck 的 route_task：
+mode=ask
+executor=auto
+task=帮我分析当前实现有没有明显问题
+```
+
+## 常用命令
+
+```bash
+codeck init
+codeck doctor
+codeck list
+codeck context
+codeck pick "review 当前架构风险"
+codeck auto "这个页面 UI 样式不对"
+codeck ask gemini "简单回答：Codeck smoke test"
+codeck ask auto "帮我分析这个需求"
+codeck ask claude_architect "review 当前 diff 有什么架构风险"
+codeck delegate auto "帮我实现测试" -y
+codeck compare claude_architect,gemini_frontend "这个方案怎么做更稳"
+codeck bringback
+```
+
+这些 CLI 命令主要用于安装、调试和 fallback。日常使用时，更推荐在 Codex 里通过 MCP 调用 Codeck。
+
+## Executor
+
+Codeck 通过 executor 表示不同 AI 工具或执行配置：
+
+- `gemini`：调用本机 Gemini CLI。
+- `gemini_web`：打开 Gemini Web，并把完整 prompt 复制到剪贴板。
+- `claude_architect`：适合架构分析和代码评审。
+- `gemini_frontend`：适合 UI、截图和长上下文分析。
+- `codex_implementer`：适合基于 handoff 继续实现代码。
+- `mock`：本地测试用，不消耗真实 AI 额度。
+
+示例：
+
+```bash
+codeck ask gemini "给 Codeck 写一段小白能看懂的介绍"
+codeck ask gemini_web "帮我分析这个页面"
+codeck compare claude_architect,gemini_frontend "评审这个 PR"
+```
+
+## 配置
+
+执行 `codeck init` 后，项目里会生成 `.codeck` 目录：
+
+```text
+.codeck/config.toml
+.codeck/project.md
+.codeck/constraints.md
+.codeck/context.md
+.codeck/runs/
+```
+
+常用文件：
+
+- `.codeck/config.toml`：executor、权限和 handoff 配置。
+- `.codeck/project.md`：项目背景、技术栈和架构说明。
+- `.codeck/constraints.md`：项目规则、偏好和限制条件。
+- `.codeck/context.md`：当前项目上下文快照。
+- `.codeck/runs/`：历史运行记录。
+
+## 自动路由
+
+Codeck 可以根据任务文本自动选择 executor。规则写在 `.codeck/config.toml`：
 
 ```toml
-# 1. 本地 AI 代理命令定义
-[agents.claude]
-command = "claude"      # 本地可执行文件名称或路径
-adapter = "claude"      # 使用的适配器类型 (支持 claude, gemini, codex, mock, generic)
+[routing]
+default_executor = "gemini"
 
-[agents.gemini]
-command = "gemini"
-adapter = "gemini"
+[[routing.rules]]
+name = "frontend"
+executor = "gemini_frontend"
+keywords = ["frontend", "ui", "css", "react", "页面", "界面", "样式", "截图"]
 
-# 2. 执行器角色 (Profiles)
-[executors.claude_architect]
-agent = "claude"
-role = "architect"
-description = "架构设计、代码理解与风险审查。"
-allowed_modes = ["ask", "subagent", "delegate", "compare"] # 允许运行的模式
-read_files = true       # 允许读取文件上下文
-write_files = false     # 是否允许写文件（为 true 时在 MCP 下会触发安全拦截，需 CLI 确认）
-run_shell = false       # 是否允许运行 Shell 命令
-context_include = ["README.md", "docs/**", "src/**", "current_diff"] # 强制包含的上下文资源
+[[routing.rules]]
+name = "architecture"
+executor = "claude_architect"
+keywords = ["architecture", "review", "risk", "架构", "评审", "风险", "重构"]
 
-[executors.gemini_frontend]
-agent = "gemini"
-role = "frontend_builder"
-description = "前端构建、UI Diff 及长上下文设计分析。"
-allowed_modes = ["ask", "delegate", "compare"]
-read_files = true
-write_files = false
-run_shell = false
-context_include = ["screenshots/**", "design/**", "src/**", "current_diff"]
-
-# 3. 运行上下文大小限制 (以字符数为单位)
-[budget]
-max_context_chars = 60000        # 本地 CLI 执行最大上下文容量
-mcp_max_context_chars = 60000    # MCP 调用执行最大上下文容量
-
-# 4. 结果回传配置
-[handoff]
-default_mode = "raw"             # 默认回传模式: raw (原始文本) 或 smart (通过 AI 整理)
-smart_enabled = true
-handoff_executor = "codex_implementer" # smart 模式下用于格式化和处理输出的执行器
-
-# 5. 对比运行配置
-[compare]
-default_execution = "sequential" # 并行度设置: sequential (顺序执行)
-allow_parallel = false
+[[routing.rules]]
+name = "implementation"
+executor = "codex_implementer"
+keywords = ["implement", "fix", "test", "实现", "修复", "测试"]
 ```
 
----
+匹配规则会按顺序执行。命中的 executor 如果不支持当前 mode，会跳过并继续找下一条规则。
 
-## 工作区目录结构 (`.devdeck/`)
+## Gemini Web
 
-初始化后，项目根目录会生成 `.devdeck/` 文件夹。其内部结构如下：
+如果你想使用网页版 Gemini 的登录态和订阅额度，可以运行：
 
-- **`config.toml`**：DevDeck 核心配置文件，用于管理底层 agent CLI 以及各种角色的权限 and 预算。
-- **`project.md`**：项目概览描述。可以在这里写明该项目的技术栈、模块职责、核心设计模式。这些内容会被作为基础上下文注入到每一次 AI 调用中。
-- **`constraints.md`**：开发规范与约束。你可以在这里写入禁止使用的库、特定的代码规范或架构禁忌（例如：*不要使用 Tailwind，只使用原生 CSS*）。
-- **`runs/`**：存放每次调用历史记录的目录。每次调用都会生成一个 `.json` (运行元数据与状态) 和一个 `.md` (完整的 Prompt 与 Output 日志)。
-- **`last.md`**：存放最后一次执行成功后输出的原始内容，方便快速查看或命令行重定向。
-- **`context.md`**：缓存的上下文文件。
+```bash
+codeck ask gemini_web "帮我分析这个页面"
+```
 
----
+Codeck 会打开 Gemini Web，并把完整 prompt 复制到剪贴板。你只需要在网页里粘贴并发送。
 
-## 命令行 CLI 使用指南
+## 注意事项
 
-DevDeck 的 CLI 不仅可以作为宿主 AI 交互的兜底方案，也是进行调试、授权、手动运行的核心工具。
+- MCP 里默认不会自动执行可写文件或跑 shell 的 executor。
+- 如果某个 executor 配了 `write_files = true` 或 `run_shell = true`，需要在本地 CLI 里手动确认。
+- Raw handoff 是默认模式，不会二次调用 AI。
+- Smart handoff 需要显式开启，并配置 `handoff_executor`。
+- 如果全局命令不可用，可以直接运行：
 
-| 命令 | 描述 | 示例 |
-| :--- | :--- | :--- |
-| `devdeck init` | 初始化当前目录为 DevDeck 工作区 | `devdeck init` |
-| `devdeck doctor` | 检查本地 Agents CLI 环境及适配器可用性 | `devdeck doctor` |
-| `devdeck context` | 手动更新/刷新打包的上下文文件 | `devdeck context` |
-| `devdeck list` | 列出所有已配置的执行器角色 (Executors) | `devdeck list` |
-| `devdeck route <mode> <executor> <task>` | 路由任务到指定的执行器运行 | `devdeck route delegate mock "分析架构设计"` |
-| `devdeck ask <executor> <task>` | 使用 `ask` 模式调用执行器（用于提问、咨询） | `devdeck ask claude_architect "解释下 index.ts"` |
-| `devdeck delegate <executor> <task>` | 使用 `delegate` 模式委派一个任务（需要写权限） | `devdeck delegate codex_implementer "编写测试用例" -y` |
-| `devdeck compare <executors> <task>` | 使用多个执行器顺序执行同一任务，并展示对比结果 | `devdeck compare claude_architect,gemini_frontend "评审此 PR"` |
-| `devdeck last` | 打印并渲染最后一次调用的输出结果 (Markdown) | `devdeck last` |
-| `devdeck bringback` | 将上一次执行结果按格式组装为 Handoff 载荷输出 | `devdeck bringback -m smart` |
-| `devdeck mcp start` | 启动 stdio 通信的 DevDeck MCP 服务 | `devdeck mcp start` |
-
-> 💡 **参数提示**：在 CLI 中运行带有写文件或运行脚本权限的 Executor 时，可以添加 `-y` 或 `--yes` 跳过终端的安全交互确认。
-
----
-
-## MCP 服务与工具参考
-
-当将 DevDeck 挂载到 Codex 等宿主 AI 助手后，宿主 AI 将能使用以下工具来协作：
-
-### 1. `route_task`
-将子任务分发给特定的本地 AI 工具执行。
-- **入参**：
-  - `mode` (`"ask" | "subagent" | "delegate"`): 运行模式。
-  - `executor` (`string`): 配置文件中定义的执行器角色。
-  - `task` (`string`): 具体任务提示词。
-  - `files` (`string[]`, 可选): 本次任务需要额外包含的文件列表。
-  - `handoffMode` (`"raw" | "smart"`, 可选): 返回结果的整理方式。
-
-### 2. `compare_executors`
-同时将某任务派发给多个 AI 执行器，方便宿主 AI 进行结果合并与优势互补。
-- **入参**：
-  - `executors` (`string[]`): 执行器列表。
-  - `task` (`string`): 任务提示词。
-  - `files` (`string[]`, 可选): 文件列表。
-
-### 3. `build_context`
-调试工具。检查如果在此环境下对当前任务打包，会生成怎样的上下文结构，以及它是否会超预算。
-- **入参**：
-  - `task` (`string`): 模拟的任务。
-  - `files` (`string[]`): 模拟包含的文件。
-
-### 4. `create_handoff`
-根据历史 Run ID，组装格式化的 Handoff 数据。
-- **入参**：
-  - `runId` (`string`, 可选): 不传则默认使用最后一次运行。
-  - `mode` (`"raw" | "smart"`): 回传模式。
-
-### 5. `get_run`
-获取某次历史调用的完整输入、输出与耗时元数据。
-- **入参**：
-  - `runId` (`string`, 可选): 不传则默认使用最后一次。
-
-### 6. `list_executors`
-列出当前项目支持的所有本地 AI 工具及角色，供宿主 AI 自由挑选分发。
-
-### 7. `doctor`
-检测本地 Agent 环境是否异常。
-
----
-
-## 安全防护与隔离机制
-
-由于 Codex 等 IDE 助手可能通过 MCP 服务自动调用本地终端，为了避免 AI 代理在无用户感知的情况下擅自更改本地 file 或运行恶意 Shell 指令，DevDeck 建立了以下安全屏障：
-
-1. **写操作/脚本权限拦截**：
-   如果 Executor 配置了 `write_files = true` 或 `run_shell = true`，且该次调用源自 **MCP 服务**，DevDeck 将抛出 `permission_requires_cli_confirmation` 错误并阻断执行。宿主 AI 会收到错误信息并提示用户在本地终端中运行对应的 `devdeck route` 命令手动确认执行。
-2. **上下文隔离**：
-   在自动打包项目上下文时，DevDeck 的核心控制文件（如 `.devdeck/context.md`、`.devdeck/last.md` 以及历史运行日志 `runs/`）均已默认加入排除名单（`exclude`），杜绝了“上下文无限自我嵌套”或本地历史执行敏感日志被发送给公有云模型的问题。
-3. **适配器隔离**：
-   DevDeck 对不同的 Agent 包装了适配器（如 `claude` 适配器使用 `-p {prompt}`，`gemini` 适配器使用 `--approval-mode plan` 等），避免使用通用的 `eval` 或是未转义的直接 Shell 拼接。
-
----
+```bash
+node /Users/suxiaohan/Desktop/codeck/dist/index.js doctor
+```
 
 ## 许可证
-本项目基于 [MIT License](LICENSE) 许可协议开源。
+
+MIT

@@ -1,0 +1,25 @@
+{
+  "id": "2026-06-17T11-22-11-812Z-ni1zxh",
+  "date": "2026-06-17T11:22:11.813Z",
+  "host": "cli",
+  "mode": "ask",
+  "executor": "gemini",
+  "agent": "gemini",
+  "task": "给我写个 hi",
+  "output": "hi\n",
+  "error": "Warning: Basic terminal detected (TERM=dumb). Visual rendering will be limited. For the best experience, use a terminal emulator with truecolor support.\nWarning: 256-color support not detected. Using a terminal with at least 256-color support is recommended for a better visual experience.\nRipgrep is not available. Falling back to GrepTool.\n",
+  "exitCode": 0,
+  "contextSummary": {
+    "chars": 57975,
+    "resourceCount": 15,
+    "truncated": false,
+    "omitted": []
+  },
+  "budget": {
+    "max": 60000,
+    "actual": 57975,
+    "exceeded": false
+  },
+  "jsonPath": "/Users/suxiaohan/Desktop/DevDeck/.devdeck/runs/2026-06-17T11-22-11-812Z-ni1zxh.json",
+  "logPath": "/Users/suxiaohan/Desktop/DevDeck/.devdeck/runs/2026-06-17T11-22-11-812Z-ni1zxh.md"
+}

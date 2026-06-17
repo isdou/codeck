@@ -6,22 +6,22 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { runDoctor } from "./config.js";
 import { buildContext, formatContextToMarkdown } from "./context.js";
-import { compareExecutors, createHandoff, DevDeckError, getRun, listExecutors, routeTask } from "./router.js";
+import { compareExecutors, createHandoff, CodeckError, getRun, listExecutors, pickExecutor, routeTask } from "./router.js";
 
 function text(text: string) {
   return { content: [{ type: "text", text }] };
 }
 
 function errorResult(error: any) {
-  const body = error instanceof DevDeckError
+  const body = error instanceof CodeckError
     ? { code: error.code, message: error.message, details: error.details }
-    : { code: 'devdeck_error', message: error.message || String(error), details: {} };
+    : { code: 'codeck_error', message: error.message || String(error), details: {} };
   return { isError: true, content: [{ type: "text", text: JSON.stringify(body, null, 2) }] };
 }
 
 export async function startMcpServer() {
   const server = new Server(
-    { name: "devdeck-mcp", version: "0.1.0" },
+    { name: "codeck-mcp", version: "0.1.0" },
     { capabilities: { tools: {} } },
   );
 
@@ -29,17 +29,29 @@ export async function startMcpServer() {
     tools: [
       {
         name: "route_task",
-        description: "Route a task from Codex to a configured DevDeck executor profile.",
+        description: "Route a task from Codex to a configured Codeck executor profile. Omit executor or pass auto to use routing rules.",
         inputSchema: {
           type: "object",
           properties: {
             mode: { type: "string", enum: ["ask", "subagent", "delegate"], description: "Routing mode." },
-            executor: { type: "string", description: "Executor profile name." },
+            executor: { type: "string", description: "Executor profile name, or auto." },
             task: { type: "string", description: "Explicit current task. Required." },
             files: { type: "array", items: { type: "string" }, description: "Optional files to include." },
             handoffMode: { type: "string", enum: ["raw", "smart"], description: "Optional handoff mode." },
           },
-          required: ["mode", "executor", "task"],
+          required: ["mode", "task"],
+        },
+      },
+      {
+        name: "pick_executor",
+        description: "Pick the configured executor for a task without invoking it.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            mode: { type: "string", enum: ["ask", "subagent", "delegate"], description: "Routing mode." },
+            task: { type: "string", description: "Explicit current task. Required." },
+          },
+          required: ["task"],
         },
       },
       {
@@ -57,7 +69,7 @@ export async function startMcpServer() {
       },
       {
         name: "build_context",
-        description: "Build a DevDeck context payload and resource summary.",
+        description: "Build a Codeck context payload and resource summary.",
         inputSchema: {
           type: "object",
           properties: {
@@ -79,7 +91,7 @@ export async function startMcpServer() {
       },
       {
         name: "get_run",
-        description: "Retrieve a previous DevDeck run by id, or the latest run if omitted.",
+        description: "Retrieve a previous Codeck run by id, or the latest run if omitted.",
         inputSchema: {
           type: "object",
           properties: { runId: { type: "string" } },
@@ -87,7 +99,7 @@ export async function startMcpServer() {
       },
       {
         name: "list_executors",
-        description: "List configured DevDeck executor profiles.",
+        description: "List configured Codeck executor profiles.",
         inputSchema: { type: "object", properties: {} },
       },
       {
@@ -137,6 +149,10 @@ export async function startMcpServer() {
           const run = await routeTask(args as any, { caller: 'mcp' });
           return text(JSON.stringify(run, null, 2));
         }
+        case "pick_executor": {
+          const { task, mode = 'ask' } = args as { task: string; mode?: any };
+          return text(pickExecutor(task, mode, process.cwd(), 'mcp'));
+        }
         case "compare_executors": {
           const result = await compareExecutors(args as any, { caller: 'mcp' });
           return text(result.output);
@@ -150,7 +166,7 @@ export async function startMcpServer() {
         }
         case "get_run": {
           const run = getRun((args as any).runId);
-          return text(run ? JSON.stringify(run, null, 2) : 'No DevDeck run found.');
+          return text(run ? JSON.stringify(run, null, 2) : 'No Codeck run found.');
         }
         case "list_executors": {
           return text(listExecutors());
@@ -172,7 +188,7 @@ export async function startMcpServer() {
           return text(getRun()?.output || 'No output recorded yet.');
         }
         default:
-          throw new DevDeckError('unknown_tool', `Unknown tool name: ${name}`);
+          throw new CodeckError('unknown_tool', `Unknown tool name: ${name}`);
       }
     } catch (error: any) {
       return errorResult(error);
@@ -181,5 +197,5 @@ export async function startMcpServer() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("[DevDeck MCP] Server running on stdio transport...");
+  console.error("[Codeck MCP] Server running on stdio transport...");
 }

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import { getDevDeckDir, loadConfig } from './config.js';
+import { getCodeckDir, loadConfig } from './config.js';
 function runGitCommand(cmd, cwd) {
     try {
         return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -125,15 +125,15 @@ export function buildContext(cwd = process.cwd(), options = {}) {
     const isGitRepo = fs.existsSync(path.join(cwd, '.git'));
     pushResource(resources, {
         type: 'text',
-        label: 'DevDeck Task',
+        label: 'Codeck Task',
         content: options.task || '',
         chars: (options.task || '').length,
     }, true);
-    const projectPath = path.join(getDevDeckDir(cwd), 'project.md');
+    const projectPath = path.join(getCodeckDir(cwd), 'project.md');
     if (fs.existsSync(projectPath)) {
         pushResource(resources, readTextFile(cwd, projectPath, contextConfig.max_file_bytes), true);
     }
-    const constraintsPath = path.join(getDevDeckDir(cwd), 'constraints.md');
+    const constraintsPath = path.join(getCodeckDir(cwd), 'constraints.md');
     if (fs.existsSync(constraintsPath)) {
         pushResource(resources, readTextFile(cwd, constraintsPath, contextConfig.max_file_bytes), true);
     }
@@ -148,7 +148,7 @@ export function buildContext(cwd = process.cwd(), options = {}) {
             chars: branch.length + recentCommit.length + status.length,
         }, true);
         if (contextConfig.include_git_diff) {
-            const diff = runGitCommand('git diff HEAD -- . ":(exclude).devdeck/context.md" ":(exclude).devdeck/last.md" ":(exclude).devdeck/runs/**" ":(exclude)dist/**"', cwd);
+            const diff = runGitCommand('git diff HEAD -- . ":(exclude).codeck/context.md" ":(exclude).codeck/last.md" ":(exclude).codeck/runs/**" ":(exclude)dist/**"', cwd);
             if (diff) {
                 pushResource(resources, { type: 'diff', label: 'Current Diff', content: diff, chars: diff.length });
             }
@@ -188,7 +188,7 @@ export function buildContext(cwd = process.cwd(), options = {}) {
     }
     const budget = options.maxChars || config.budget.max_context_chars;
     const trimmed = trimResources(resources, budget);
-    const markdown = `# DevDeck Context\n\n${markdownFromResources(trimmed.resources)}`;
+    const markdown = `# Codeck Context\n\n${markdownFromResources(trimmed.resources)}`;
     return {
         markdown,
         resources: trimmed.resources,
@@ -206,7 +206,7 @@ export function formatContextToMarkdown(ctx) {
 export function writeContextCache(cwd = process.cwd()) {
     const ctx = buildContext(cwd);
     const md = formatContextToMarkdown(ctx);
-    fs.mkdirSync(getDevDeckDir(cwd), { recursive: true });
-    fs.writeFileSync(path.join(getDevDeckDir(cwd), 'context.md'), md, 'utf8');
+    fs.mkdirSync(getCodeckDir(cwd), { recursive: true });
+    fs.writeFileSync(path.join(getCodeckDir(cwd), 'context.md'), md, 'utf8');
     return md;
 }

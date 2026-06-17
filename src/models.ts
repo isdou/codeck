@@ -48,6 +48,17 @@ export interface CompareConfig {
   allow_parallel: boolean;
 }
 
+export interface RouteRule {
+  name?: string;
+  executor: string;
+  keywords: string[];
+}
+
+export interface RoutingConfig {
+  default_executor: string;
+  rules: RouteRule[];
+}
+
 export interface Config {
   agents: Record<string, AgentConfig>;
   executors: Record<string, ExecutorProfile>;
@@ -55,6 +66,7 @@ export interface Config {
   budget: BudgetConfig;
   handoff: HandoffConfig;
   compare: CompareConfig;
+  routing: RoutingConfig;
 }
 
 export interface ContextResource {
@@ -80,7 +92,7 @@ export interface BuiltContext {
 export interface RouteTaskInput {
   host?: Host;
   mode: RouteMode;
-  executor: string;
+  executor?: string;
   task: string;
   files?: string[];
   handoffMode?: HandoffMode;

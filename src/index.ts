@@ -6,10 +6,11 @@ import { marked } from 'marked';
 import TerminalRenderer from 'marked-terminal';
 import { createInterface } from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
-import { initDevDeck, runDoctor, getConfigPath, loadConfig } from './config.js';
+import { spawnSync } from 'child_process';
+import { initCodeck, runDoctor, getConfigPath, loadConfig } from './config.js';
 import { writeContextCache } from './context.js';
 import { startMcpServer } from './mcp.js';
-import { compareExecutors, createHandoff, getRun, listExecutors, routeTask } from './router.js';
+import { compareExecutors, createHandoff, getRun, listExecutors, pickExecutor, routeTask } from './router.js';
 import type { RouteMode } from './models.js';
 
 marked.setOptions({ renderer: new TerminalRenderer() });
@@ -17,8 +18,8 @@ marked.setOptions({ renderer: new TerminalRenderer() });
 const program = new Command();
 
 program
-  .name('devdeck')
-  .description('DevDeck: Codex-first local AI CLI Router MCP server')
+  .name('codeck')
+  .description('Codeck: Codex-first local AI CLI Router MCP server')
   .version('0.1.0');
 
 async function confirmDangerousExecutor(executor: string, yes: boolean) {
@@ -37,13 +38,32 @@ function taskFrom(parts: string[]): string {
   return parts.join(' ').trim();
 }
 
+function commandExists(command: string): boolean {
+  return spawnSync(process.platform === 'win32' ? 'where' : 'which', [command], { stdio: 'ignore' }).status === 0;
+}
+
+function installGeminiCli() {
+  if (commandExists('gemini')) {
+    console.log(chalk.green('gemini is already installed.'));
+    return;
+  }
+  if (!commandExists('npm')) {
+    throw new Error('npm is required to install Gemini CLI.');
+  }
+  const result = spawnSync('npm', ['install', '-g', '@google/gemini-cli'], { stdio: 'inherit' });
+  if (result.status !== 0) {
+    throw new Error(`npm install failed with code ${result.status}.`);
+  }
+  console.log(chalk.green('Installed Gemini CLI.'));
+}
+
 program
   .command('init')
-  .description('Initialize DevDeck workspace')
+  .description('Initialize Codeck workspace')
   .action(() => {
     try {
-      const res = initDevDeck();
-      console.log(res.created ? chalk.green('Initialized DevDeck.') : chalk.yellow('DevDeck is already initialized.'));
+      const res = initCodeck();
+      console.log(res.created ? chalk.green('Initialized Codeck.') : chalk.yellow('Codeck is already initialized.'));
       console.log(chalk.gray(`Config: ${res.configPath}`));
     } catch (err: any) {
       console.error(chalk.red(`Error: ${err.message}`));
@@ -58,10 +78,10 @@ program
     try {
       const res = runDoctor();
       if (!res.configExists) {
-        console.log(chalk.red('DevDeck is not initialized. Run "devdeck init" first.'));
+        console.log(chalk.red('Codeck is not initialized. Run "codeck init" first.'));
         process.exit(1);
       }
-      console.log(chalk.bold('\nDevDeck Doctor\n'));
+      console.log(chalk.bold('\nCodeck Doctor\n'));
       console.log(`${chalk.green('config')} ${getConfigPath()}`);
       for (const agent of res.agents) {
         console.log(`${agent.exists ? chalk.green('ok') : chalk.red('missing')} ${agent.agentName} adapter=${agent.adapter} command=${agent.command} - ${agent.message}`);
@@ -74,8 +94,24 @@ program
   });
 
 program
+  .command('install')
+  .description('Install supported executor CLIs')
+  .argument('<agent>', 'Currently supported: gemini')
+  .action((agent: string) => {
+    try {
+      if (agent !== 'gemini') {
+        throw new Error('Only "gemini" auto-install is supported.');
+      }
+      installGeminiCli();
+    } catch (err: any) {
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
+  });
+
+program
   .command('context')
-  .description('Refresh .devdeck/context.md')
+  .description('Refresh .codeck/context.md')
   .action(() => {
     try {
       writeContextCache();
@@ -99,8 +135,45 @@ program
   });
 
 program
+  .command('pick')
+  .description('Pick an executor from routing rules without invoking it')
+  .argument('<task...>', 'Task text')
+  .option('-m, --mode <mode>', 'ask, subagent, or delegate', 'ask')
+  .action((taskParts: string[], options) => {
+    try {
+      console.log(pickExecutor(taskFrom(taskParts), options.mode as RouteMode, process.cwd(), 'cli'));
+    } catch (err: any) {
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('auto')
+  .description('Pick an executor from routing rules and run the task')
+  .argument('<task...>', 'Task text')
+  .option('-m, --mode <mode>', 'ask, subagent, or delegate', 'ask')
+  .option('-f, --file <file...>', 'Files to include')
+  .option('-y, --yes', 'Confirm writable/shell-enabled executor')
+  .action(async (taskParts: string[], options) => {
+    try {
+      const mode = options.mode as RouteMode;
+      const task = taskFrom(taskParts);
+      const executor = pickExecutor(task, mode, process.cwd(), 'cli');
+      await confirmDangerousExecutor(executor, Boolean(options.yes));
+      const run = await routeTask({ mode, executor, task, files: options.file }, { caller: 'cli' });
+      console.log(run.output);
+      console.log(chalk.gray(`\nExecutor: ${executor}`));
+      console.log(chalk.gray(`Run: ${run.id}`));
+    } catch (err: any) {
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
+  });
+
+program
   .command('route')
-  .description('Fallback route command: devdeck route <mode> <executor> <task...>')
+  .description('Fallback route command: codeck route <mode> <executor> <task...>')
   .argument('<mode>', 'ask, subagent, or delegate')
   .argument('<executor>', 'Executor profile')
   .argument('<task...>', 'Task text')
@@ -108,8 +181,10 @@ program
   .option('-y, --yes', 'Confirm writable/shell-enabled executor')
   .action(async (mode: RouteMode, executor: string, taskParts: string[], options) => {
     try {
-      await confirmDangerousExecutor(executor, Boolean(options.yes));
-      const run = await routeTask({ mode, executor, task: taskFrom(taskParts), files: options.file }, { caller: 'cli' });
+      const task = taskFrom(taskParts);
+      const selectedExecutor = executor === 'auto' ? pickExecutor(task, mode, process.cwd(), 'cli') : executor;
+      await confirmDangerousExecutor(selectedExecutor, Boolean(options.yes));
+      const run = await routeTask({ mode, executor: selectedExecutor, task, files: options.file }, { caller: 'cli' });
       console.log(run.output);
       console.log(chalk.gray(`\nRun: ${run.id}`));
     } catch (err: any) {
@@ -126,7 +201,9 @@ program
   .option('-f, --file <file...>', 'Files to include')
   .action(async (executor: string, taskParts: string[], options) => {
     try {
-      const run = await routeTask({ mode: 'ask', executor, task: taskFrom(taskParts), files: options.file }, { caller: 'cli' });
+      const task = taskFrom(taskParts);
+      const selectedExecutor = executor === 'auto' ? pickExecutor(task, 'ask', process.cwd(), 'cli') : executor;
+      const run = await routeTask({ mode: 'ask', executor: selectedExecutor, task, files: options.file }, { caller: 'cli' });
       console.log(run.output);
       console.log(chalk.gray(`\nRun: ${run.id}`));
     } catch (err: any) {
@@ -144,8 +221,10 @@ program
   .option('-y, --yes', 'Confirm writable/shell-enabled executor')
   .action(async (executor: string, taskParts: string[], options) => {
     try {
-      await confirmDangerousExecutor(executor, Boolean(options.yes));
-      const run = await routeTask({ mode: 'delegate', executor, task: taskFrom(taskParts), files: options.file }, { caller: 'cli' });
+      const task = taskFrom(taskParts);
+      const selectedExecutor = executor === 'auto' ? pickExecutor(task, 'delegate', process.cwd(), 'cli') : executor;
+      await confirmDangerousExecutor(selectedExecutor, Boolean(options.yes));
+      const run = await routeTask({ mode: 'delegate', executor: selectedExecutor, task, files: options.file }, { caller: 'cli' });
       console.log(run.output);
       console.log(chalk.gray(`\nRun: ${run.id}`));
     } catch (err: any) {
@@ -176,7 +255,7 @@ program
   .action(() => {
     const run = getRun();
     if (!run) {
-      console.log(chalk.yellow('No DevDeck runs found.'));
+      console.log(chalk.yellow('No Codeck runs found.'));
       return;
     }
     console.log(marked(run.output));
@@ -197,7 +276,7 @@ program
 
 program
   .command('mcp')
-  .description('Manage DevDeck MCP Server')
+  .description('Manage Codeck MCP Server')
   .command('start')
   .description('Start stdio MCP server')
   .action(async () => {
