@@ -1,0 +1,36 @@
+{
+  "id": "2026-06-17T07-26-14-845Z-uhwkyz",
+  "date": "2026-06-17T07:26:14.846Z",
+  "host": "cli",
+  "mode": "ask",
+  "executor": "gemini",
+  "agent": "gemini",
+  "task": "简单回答：DevDeck smoke test",
+  "output": "DevDeck 的 Smoke Test（冒烟测试）可以通过以下简单步骤完成，用于验证核心流程是否通畅：\n\n1.  **环境自检**：运行 `devdeck doctor`。该命令会检查本地已安装的 AI CLI（如 Claude Code, Gemini CLI）以及适配器的可用性。\n2.  **配置核对**：运行 `devdeck list`。确认 `.devdeck/config.toml` 中定义的执行器（Executors）已正确加载。\n3.  **链路测试**：运行 `devdeck ask mock \"Hello\"`。使用 `mock` 模式验证任务路由、上下文打包（Context Packing）以及结果返回的完整链路，而不消耗实际 Token。\n4.  **MCP 验证**：运行 `devdeck mcp start`。确保 MCP 服务能够正常启动，以便被 Codex 等宿主环境调用。\n\n如果以上命令均无报错且输出符合预期，即表示 DevDeck 核心功能正常。\n",
+  "error": "(node:39870) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:39871) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\nWarning: Basic terminal detected (TERM=dumb). Visual rendering will be limited. For the best experience, use a terminal emulator with truecolor support.\nWarning: 256-color support not detected. Using a terminal with at least 256-color support is recommended for a better visual experience.\nRipgrep is not available. Falling back to GrepTool.\n",
+  "exitCode": 0,
+  "contextSummary": {
+    "chars": 4971,
+    "resourceCount": 5,
+    "truncated": true,
+    "omitted": [
+      "src/types.d.ts",
+      "src/runner.ts",
+      "src/router.ts",
+      "src/models.ts",
+      "src/mcp.ts",
+      "src/index.ts",
+      "src/context.ts",
+      "src/config.ts",
+      "src/adapters.ts",
+      "Current Diff"
+    ]
+  },
+  "budget": {
+    "max": 60000,
+    "actual": 4971,
+    "exceeded": false
+  },
+  "jsonPath": "/Users/suxiaohan/Desktop/DevDeck/.devdeck/runs/2026-06-17T07-26-14-845Z-uhwkyz.json",
+  "logPath": "/Users/suxiaohan/Desktop/DevDeck/.devdeck/runs/2026-06-17T07-26-14-845Z-uhwkyz.md"
+}

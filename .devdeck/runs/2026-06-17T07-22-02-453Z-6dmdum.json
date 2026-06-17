@@ -1,0 +1,35 @@
+{
+  "id": "2026-06-17T07-22-02-453Z-6dmdum",
+  "date": "2026-06-17T07:22:02.454Z",
+  "host": "cli",
+  "mode": "ask",
+  "executor": "mock",
+  "agent": "mock",
+  "task": "Check DevDeck router smoke test",
+  "output": "Mock executor: mock\nMode-compatible role: mock\nTask: Check DevDeck router smoke test\nContext chars: 56550",
+  "error": "",
+  "exitCode": 0,
+  "contextSummary": {
+    "chars": 56550,
+    "resourceCount": 6,
+    "truncated": true,
+    "omitted": [
+      "src/types.d.ts",
+      "src/runner.ts",
+      "src/router.ts",
+      "src/models.ts",
+      "src/mcp.ts",
+      "src/index.ts",
+      "src/context.ts",
+      "src/config.ts",
+      "src/adapters.ts"
+    ]
+  },
+  "budget": {
+    "max": 60000,
+    "actual": 56550,
+    "exceeded": false
+  },
+  "jsonPath": "/Users/suxiaohan/Desktop/DevDeck/.devdeck/runs/2026-06-17T07-22-02-453Z-6dmdum.json",
+  "logPath": "/Users/suxiaohan/Desktop/DevDeck/.devdeck/runs/2026-06-17T07-22-02-453Z-6dmdum.md"
+}
