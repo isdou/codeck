@@ -77,6 +77,7 @@ function installAntigravityCli() {
 function printRunSummary(run: any) {
   console.log(chalk.gray(`\nExecutor: ${run.executor} | Agent: ${run.agent}`));
   console.log(chalk.gray(`Run: ${run.id}`));
+  console.log(chalk.gray(`Context: ${run.budget.actual.toLocaleString()} / ${run.budget.max.toLocaleString()} chars`));
   if (run.usage) {
     const typeLabel = run.usage.estimated ? 'Est.' : 'Exact';
     console.log(
@@ -280,6 +281,7 @@ program
     try {
       const result = await compareExecutors({ executors: executors.split(',').map((s) => s.trim()), task: taskFrom(taskParts), files: options.file }, { caller: 'cli' });
       console.log(result.output);
+      printRunSummary(result.run);
     } catch (err: any) {
       console.error(chalk.red(err.message));
       process.exit(1);
@@ -296,6 +298,7 @@ program
       return;
     }
     console.log(marked(run.output));
+    printRunSummary(run);
   });
 
 program

@@ -121,6 +121,8 @@ graph TD
 - **`ask_context_chars`** (默认 `16,000` 字符)：适用于只读式的小提问，保证速度。
 - **`max_context_chars`** (默认 `60,000` 字符)：适用于 `delegate`（具体实现）或使用 `--full-context` 参数时的完整回答。
 
+每次运行后，CLI 会打印本次上下文占用、prompt/completion token 和成本估算；同样的信息也会写入 `.codeck/runs/*.json` 与 `.codeck/runs/*.md`。API executor 会尽量使用 provider 返回的真实 token；普通 CLI executor 拿不到真实账单时会按字符数估算，并标记为 `Est.`。
+
 ---
 
 ## ⚙️ 路由规则与配置
