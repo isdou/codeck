@@ -1,7 +1,9 @@
-# 🔌 Codeck
+# Codeck
 
-> **codeck**: Let Codex, Claude Code, Gemini CLI / agy CLI hand off context locally without pain.  
-> *codeck: 让 Codex、Claude Code、Gemini CLI / agy CLI 之间无痛交接上下文的本地工具。*
+**Codex-first context handoff for Gemini, Claude Code, and Antigravity CLI.**
+
+When you explicitly ask Codex to use Gemini, Claude, or Antigravity, Codeck packages the current repo state, diff, AGENTS rules, and project notes for that local AI CLI.  
+No repeated project explanation. No model choice made behind the user's back.
 
 ---
 
@@ -13,6 +15,8 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D%2018.0.0-blue.svg)](https://nodejs.org/)
 [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.org)
 
+![Codeck terminal demo](./assets/demo.gif)
+
 ## 🎯 Why Codeck?
 
 As a developer using AI-assisted coding, you might:
@@ -20,18 +24,18 @@ As a developer using AI-assisted coding, you might:
 2. But occasionally prefer **Claude Code** for complex code comprehension, architectural analysis, and reviews;
 3. Or find **Gemini CLI** / **Antigravity CLI** to be a lifesaver for large-context tasks, frontend styling, or writing documentation.
 
-**Since each tool has its own strengths, why choose? You can have them all!**  
 However, switching between these CLI tools usually comes with a major pain point: **you have to copy your project context, tech stack, and current git diffs manually, and repeat your project explanation to the new AI.**
 
 **Codeck is built to solve this exact problem.**  
-Think of Codeck as a **Codex Subagent Router**, but instead of invoking different prompts within the same model, it delegates tasks to different specialized local AI CLI tools. It packages your current workspace context into a clean payload and hands it off seamlessly.
+Think of Codeck as a **local context handoff bridge for Codex**: it only delegates when you explicitly name the external model or executor.
 
 ---
 
 ## ✨ Key Features
 
 - 📦 **Zero-Config Context Packaging**: Automatically aggregates your Git state, uncommitted diffs, project background description, global constraints, and relevant files into a structured markdown context.
-- 🧭 **Intelligent Routing**: Analyzes your task description (e.g. "Review architecture", "Fix UI style") and routes it to the most capable AI tool.
+- 🧭 **Explicit Model Triggering**: Delegates only when the task names Gemini, Claude, Antigravity, or another configured executor.
+- 🔎 **Route Preview (`pick`)**: Preview which executor would run before handing off.
 - 📊 **Multi-Model Compare (`compare`)**: Send a single task to multiple executors (e.g., Claude and Gemini) and compare their solutions side-by-side.
 - 🌐 **Web Session Reuse (`gemini_web`)**: Open Gemini Web in your browser with the fully packed context copied to your clipboard—saving API costs by reusing your web subscription quota.
 - 🔌 **Codex MCP Integration**: Add Codeck as an MCP server in Codex. You can query models directly from Codex (e.g. *"Ask Gemini to analyze this performance bottleneck"*), and Codex will run Codeck behind the scenes.
@@ -72,9 +76,9 @@ This will create a `.codeck/` directory containing:
 - `constraints.md`: **Specify your code styles & coding rules** here so the AI respects them.
 
 ### Step 3: Run Your First Routed Task
-Let Codeck pick the best executor automatically based on keywords:
+Preview which executor would run:
 ```bash
-codeck auto "The UI layout of this page is misaligned. How do I fix it?"
+codeck pick "Ask Gemini to review the current diff for obvious issues"
 ```
 Or target a specific executor directly:
 ```bash
@@ -92,7 +96,7 @@ codeck ask gemini "Identify any security vulnerabilities in the current changes"
 | **`codeck list`** | `codeck list` | Lists all configured executor profiles and their permissions. |
 | **`codeck context`** | `codeck context` | Rebuilds and updates the local context snapshot `.codeck/context.md`. |
 | **`codeck pick`** | `codeck pick "Architecture refactoring"` | Previews which executor would be chosen for a task based on routing rules. |
-| **`codeck auto`** | `codeck auto "Fix css alignment"` | **Auto-Routing**: Automatically selects the best executor and runs the task. |
+| **`codeck auto`** | `codeck auto "Ask Gemini to inspect this CSS issue"` | **Configured Routing**: Uses explicit model names or local rules to choose an executor. |
 | **`codeck ask`** | `codeck ask gemini "Write tests"` | **Read-Only**: Sends a task to a specific executor under a smaller token budget. |
 | **`codeck delegate`**| `codeck delegate codex_implementer "Fix bugs" -y` | **Implementation**: Allows executors to write files or run commands (use `-y` to auto-approve). |
 | **`codeck compare`** | `codeck compare claude_architect,gemini_frontend "Refactor scheme"` | **Comparison**: Runs the task on multiple executors and outputs side-by-side results. |
