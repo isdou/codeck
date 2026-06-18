@@ -3,7 +3,7 @@ import path from 'path';
 import { getAdapter, formatRunMarkdown } from './adapters.js';
 import { getCodeckDir, loadConfig } from './config.js';
 import { buildContext } from './context.js';
-import type { CompareExecutorsInput, Config, HandoffMode, RouteMode, RouteRule, RouteTaskInput, RunRecord } from './models.js';
+import type { CompareExecutorsInput, Config, HandoffMode, RouteMode, RouteRule, RouteTaskInput, RunRecord, RunUsage } from './models.js';
 
 export class CodeckError extends Error {
   constructor(public code: string, message: string, public details: Record<string, unknown> = {}) {
@@ -22,8 +22,11 @@ function runsDir(cwd: string): string {
 function latestRunJson(cwd: string): string | null {
   const dir = runsDir(cwd);
   if (!fs.existsSync(dir)) return null;
-  const files = fs.readdirSync(dir).filter((file) => file.endsWith('.json')).sort();
-  return files.length ? path.join(dir, files[files.length - 1]) : null;
+  const files = fs.readdirSync(dir)
+    .filter((file) => file.endsWith('.json'))
+    .map((file) => path.join(dir, file))
+    .sort((a, b) => fs.statSync(a).mtimeMs - fs.statSync(b).mtimeMs);
+  return files[files.length - 1] || null;
 }
 
 function saveRun(cwd: string, run: Omit<RunRecord, 'logPath' | 'jsonPath'>): RunRecord {
@@ -88,6 +91,18 @@ export function resolveExecutor(
 export function pickExecutor(task: string, mode: RouteMode = 'ask', cwd: string = process.cwd(), caller?: 'cli' | 'mcp'): string {
   assertTask(task);
   return resolveExecutor(loadConfig(cwd), task, mode, caller);
+}
+
+function sumUsage(runs: RunRecord[]): RunUsage | undefined {
+  const usageRuns = runs.filter((run) => run.usage);
+  if (!usageRuns.length) return undefined;
+  return {
+    promptTokens: usageRuns.reduce((sum, run) => sum + run.usage!.promptTokens, 0),
+    completionTokens: usageRuns.reduce((sum, run) => sum + run.usage!.completionTokens, 0),
+    totalTokens: usageRuns.reduce((sum, run) => sum + run.usage!.totalTokens, 0),
+    estimatedCostUsd: usageRuns.reduce((sum, run) => sum + run.usage!.estimatedCostUsd, 0),
+    estimated: usageRuns.some((run) => run.usage!.estimated),
+  };
 }
 
 export async function routeTask(
@@ -233,6 +248,7 @@ export async function compareExecutors(
       actual: output.length,
       exceeded: output.length > config.budget.max_context_chars,
     },
+    usage: sumUsage(runs),
   });
 
   return { runs, output, run: aggregateRun };

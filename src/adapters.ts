@@ -39,6 +39,7 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   'claude': { inputCostPerM: 3.00, outputCostPerM: 15.00 },
   'gemini': { inputCostPerM: 0.075, outputCostPerM: 0.30 },
   'antigravity': { inputCostPerM: 0.075, outputCostPerM: 0.30 },
+  'mock': { inputCostPerM: 0, outputCostPerM: 0 },
 };
 
 export function getPricing(modelOrAgent: string): ModelPricing {
