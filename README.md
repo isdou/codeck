@@ -1,7 +1,9 @@
-# 🔌 Codeck
+# Codeck
 
-> **codeck**: 让 Codex、Claude Code、Gemini CLI / agy CLI 之间无痛交接上下文的本地工具。  
-> *codeck helps AI coding CLIs hand off context without making you explain the project again.*
+**Codex-first context handoff for Gemini, Claude Code, and Antigravity CLI.**
+
+在 Codex 里明确说“用 Gemini / Claude / Antigravity 看一下”时，Codeck 才会把当前仓库的 Git 状态、diff、AGENTS 规则和项目说明打包交给对应的本地 AI CLI。  
+不用重新解释项目，也不替用户擅自选择模型。
 
 ---
 
@@ -13,6 +15,8 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D%2018.0.0-blue.svg)](https://nodejs.org/)
 [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.org)
 
+![Codeck terminal demo](./assets/demo.gif)
+
 ## 🎯 为什么需要 Codeck？
 
 作为一个 AI 辅助编程的开发者，你可能：
@@ -20,18 +24,18 @@
 2. 但偶尔觉得 **Claude Code** 读复杂代码、梳理架构和跑 Review 时更胜一筹；
 3. 又或者在面对大项目、写前端 UI、生成文档文案时，觉得拥有超长上下文的 **Gemini CLI** 或者 **Antigravity CLI** 才是神器。
 
-**既然每个工具都有看家本领，成年人当然全都要！**  
 但每次在不同 CLI 工具之间切换，都面临一个巨大痛点：**不得不把项目背景、框架技术栈、甚至当前写了一半的 Diff 代码重新复制一遍，再唠叨地向新 AI 解释一次。**
 
 **Codeck 就是为了解决这个问题而生的。**  
-它可以被看作是 **Codex 的 Subagent（子智能体）路由器**，但这个 Subagent 不是同一个模型里的不同分身，而是**运行在你本地、由不同顶尖 AI CLI 执行的专业特工**。它可以把当前项目的上下文一键打包，完美无痛地分派给你订阅的其他本地 AI CLI。
+它可以被看作是 **Codex 的本地上下文交接器**：只有当你明确点名外部模型时，它才把当前项目上下文打包给你订阅的本地 AI CLI。
 
 ---
 
 ## ✨ 核心特性
 
 - 📦 **零配置上下文打包**：自动提取 Git 状态、Current Diff、项目背景、全局约束规则、相关源文件，融合成标准上下文。
-- 🧭 **智能任务路由**：根据你的任务描述（如“Review 架构”、“修改 UI”），自动分析并路由到最擅长的 AI 工具。
+- 🧭 **显式模型触发**：只有任务里明确提到 Gemini、Claude、Antigravity 等执行器时，才交给对应工具。
+- 🔎 **可预览路由 (`pick`)**：不确定会交给谁时，先预览，不直接执行。
 - 📊 **多模型同台竞技 (`compare`)**：输入一条任务，让 Claude 和 Gemini 针对同一上下文分别给出方案，方便对比。
 - 🌐 **网页版额度复用 (`gemini_web`)**：如果不想消耗 API 额度，可以使用网页版桥接模式，一键打开网页并自动把上下文和 Prompt 拷入剪贴板。
 - 🔌 **Codex MCP 无缝集成**：一次性把 Codeck 注册为 Codex 的 MCP 服务，以后你在 Codex 聊天时输入 `“用 Gemini 帮我分析当前实现”`，Codex 就会在后台自动调用 Codeck，不需要手动切出命令行！
@@ -71,9 +75,9 @@ codeck init
 - `constraints.md`：**在此填写开发规范与避坑指南**，AI 绝不敢违背。
 
 ### 第三步：路由你的第一个任务
-让 Codeck 自动根据任务关键词为你挑选最合适的 Executor 运行：
+先预览任务会交给哪个 Executor：
 ```bash
-codeck auto "这个页面 UI 样式不对，帮我看看怎么改"
+codeck pick "用 Gemini 分析当前 diff 有没有明显问题"
 ```
 或者显式指定你要使用的工具：
 ```bash
@@ -93,7 +97,7 @@ Codeck 的 CLI 命令设计得非常直观，适合日常开发、调试或在�
 | **`codeck list`** | `codeck list` | 查看当前项目下可用的 Executor 列表和它们的权限 |
 | **`codeck context`** | `codeck context` | 手动刷新并生成当前项目的上下文快照 `.codeck/context.md` |
 | **`codeck pick`** | `codeck pick "架构重构建议"` | 预览任务，查看 Codeck 的路由算法会把该任务分配给谁 |
-| **`codeck auto`** | `codeck auto "这个样式漏了"` | **自动路由**：分析任务并自动挑选 Executor 运行 |
+| **`codeck auto`** | `codeck auto "用 Gemini 看这个样式问题"` | **配置路由**：按显式模型名或本地规则选择 Executor 运行 |
 | **`codeck ask`** | `codeck ask gemini "测试这部分逻辑"` | **只读提问**：发送任务给指定 Executor，默认控制在较小上下文，防止超时卡顿 |
 | **`codeck delegate`**| `codeck delegate codex_implementer "编写测试用例" -y` | **执行授权**：允许 Executor 回写代码或执行 Shell（配合 `-y` 自动确认危险操作） |
 | **`codeck compare`** | `codeck compare claude_architect,gemini_frontend "架构重构方案"` | **对比模式**：让多个 AI 工具针对同一上下文各做一次回答 |
