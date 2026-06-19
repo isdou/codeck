@@ -37,7 +37,6 @@ Think of Codeck as a **local context handoff bridge for Codex**: it only delegat
 - 🧭 **Explicit Model Triggering**: Delegates only when the task names Gemini, Claude, Antigravity, or another configured executor.
 - 🔎 **Route Preview (`pick`)**: Preview which executor would run before handing off.
 - 📊 **Multi-Model Compare (`compare`)**: Send a single task to multiple executors (e.g., Claude and Gemini) and compare their solutions side-by-side.
-- 🌐 **Web Session Reuse (`gemini_web`)**: Open Gemini Web in your browser with the fully packed context copied to your clipboard—saving API costs by reusing your web subscription quota.
 - 🔌 **Codex MCP Integration**: Add Codeck as an MCP server in Codex. You can query models directly from Codex (e.g. *"Ask Gemini to analyze this performance bottleneck"*), and Codex will run Codeck behind the scenes.
 - 📈 **Quota & Cost Tracking**: Displays precise token usage (Prompt/Completion) and estimated USD costs at the end of each run, saving metrics to history logs.
 
@@ -152,8 +151,6 @@ keywords = ["architecture", "review", "risk", "refactor", "design"]
 - 🧑‍🎨 **`gemini_frontend`**: Uses Gemini, optimized for frontend layouts, screenshots, and long-context analysis.
 - 🏗 **`claude_architect`**: Uses Claude, ideal for deep architectural refactoring and code reviews.
 - 💻 **`codex_implementer`**: Allows file writes and command executions to apply fixes back into Codex.
-- 🌐 **`gemini_web`** (macOS only): Opens Gemini Web and copies the packaged prompt to your clipboard (uses browser subscription for free).
-
 ### 3. API Key & Direct REST API (New!)
 You can configure API keys and run tasks directly without installing CLI wrappers:
 

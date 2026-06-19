@@ -203,33 +203,6 @@ export const mockAdapter: AgentAdapter = {
   },
 };
 
-export const geminiWebAdapter: AgentAdapter = {
-  name: 'gemini_web',
-  capabilities: { text: true, file: true, image: false, document: true, writeFiles: false, runShell: false },
-  probe() {
-    if (process.platform !== 'darwin') return { ok: false, message: 'gemini_web currently supports macOS open/pbcopy only' };
-    return commandExists('open') && commandExists('pbcopy')
-      ? { ok: true, message: 'Gemini web bridge ready' }
-      : { ok: false, message: 'open or pbcopy not found' };
-  },
-  async invoke(input) {
-    const prompt = buildPrompt(input);
-    const copy = spawnSync('pbcopy', { input: prompt });
-    if (copy.status !== 0) {
-      return { output: '', error: 'Failed to copy prompt to clipboard with pbcopy.', exitCode: copy.status };
-    }
-    spawn('open', ['https://gemini.google.com/app'], { detached: true, stdio: 'ignore' }).unref();
-    return {
-      output: [
-        'Gemini Web opened.',
-        'The full Codeck prompt has been copied to your clipboard.',
-        'Paste it into Gemini Web, send it, then bring the answer back to Codex.',
-      ].join('\n'),
-      error: '',
-      exitCode: 0,
-    };
-  },
-};
 
 export const geminiApiAdapter: AgentAdapter = {
   name: 'gemini_api',
@@ -337,8 +310,6 @@ export function getAdapter(name: string | undefined): AgentAdapter {
   switch ((name || 'generic').toLowerCase()) {
     case 'mock':
       return mockAdapter;
-    case 'gemini_web':
-      return geminiWebAdapter;
     case 'gemini_api':
       return geminiApiAdapter;
     case 'claude_api':
