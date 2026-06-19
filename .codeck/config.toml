@@ -12,7 +12,7 @@ timeout_ms = 90000
 
 [agents.antigravity]
 command = "agy"
-timeout_ms = 60000
+timeout_ms = 180000
 
 [context]
 include_git_diff = true

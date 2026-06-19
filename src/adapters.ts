@@ -157,8 +157,8 @@ function spawnPrompt(agent: AgentConfig, promptArgs: string[], prompt: string, c
 
     if (promptArgs.length === 0) {
       child.stdin.write(prompt);
-      child.stdin.end();
     }
+    child.stdin.end();
   });
 }
 
@@ -350,7 +350,7 @@ export function getAdapter(name: string | undefined): AgentAdapter {
         GEMINI_CLI_TRUST_WORKSPACE: 'true',
       });
     case 'antigravity':
-      return makeCliAdapter('antigravity', ['--sandbox', '--print-timeout', '45s', '--print', '{prompt}'], { text: true, file: true, image: false, document: true, writeFiles: false, runShell: false });
+      return makeCliAdapter('antigravity', ['--dangerously-skip-permissions', '--print-timeout', '120s', '--print', '{prompt}'], { text: true, file: true, image: false, document: true, writeFiles: false, runShell: false });
     case 'codex':
       return makeCliAdapter('codex', ['exec', '{prompt}'], { text: true, file: true, image: false, document: true, writeFiles: true, runShell: true });
     default:
