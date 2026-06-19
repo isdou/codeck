@@ -8,7 +8,7 @@ const DEFAULT_AGENTS: Record<string, AgentConfig> = {
   codex: { command: 'codex', adapter: 'codex', timeout_ms: 180000 },
   claude: { command: 'claude', adapter: 'claude', timeout_ms: 180000 },
   gemini: { command: 'gemini', adapter: 'gemini', timeout_ms: 90000 },
-  antigravity: { command: 'agy', adapter: 'antigravity', timeout_ms: 60000 },
+  antigravity: { command: 'agy', adapter: 'antigravity', timeout_ms: 180000 },
   gemini_web: { command: 'open', adapter: 'gemini_web' },
   mock: { command: 'mock', adapter: 'mock' },
   gemini_api: { command: 'api', adapter: 'gemini_api', timeout_ms: 90000 },
