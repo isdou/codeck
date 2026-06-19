@@ -37,7 +37,6 @@
 - 🧭 **显式模型触发**：只有任务里明确提到 Gemini、Claude、Antigravity 等执行器时，才交给对应工具。
 - 🔎 **可预览路由 (`pick`)**：不确定会交给谁时，先预览，不直接执行。
 - 📊 **多模型同台竞技 (`compare`)**：输入一条任务，让 Claude 和 Gemini 针对同一上下文分别给出方案，方便对比。
-- 🌐 **网页版额度复用 (`gemini_web`)**：如果不想消耗 API 额度，可以使用网页版桥接模式，一键打开网页并自动把上下文和 Prompt 拷入剪贴板。
 - 🔌 **Codex MCP 无缝集成**：一次性把 Codeck 注册为 Codex 的 MCP 服务，以后你在 Codex 聊天时输入 `“用 Gemini 帮我分析当前实现”`，Codex 就会在后台自动调用 Codeck，不需要手动切出命令行！
 
 ---
@@ -156,8 +155,6 @@ Codeck 预设了以下 Executor 配置文件：
 - 🧑‍🎨 **`gemini_frontend`**：调用 Gemini，专注前端 UI 优化与大上下文分析。
 - 🏗 **`claude_architect`**：调用 Claude，最适合做深度的架构分析和重构 Review。
 - 💻 **`codex_implementer`**：允许写文件和跑 Shell，通常用于将分析好的方案带回 Codex 进行落地编码。
-- 🌐 **`gemini_web`**（仅支持 macOS）：**白嫖额度神器**。它会直接打开 Gemini 网页版，并将完美打包好的 Context 和 Prompt 直接复制进你的系统剪贴板，你只需要在浏览器里 `Cmd+V` 并回车即可！
-
 ### 3. 配置 API Key 与直连 API 模式 (New!)
 如果你想为 CLI 注入自定义 API Key，或者不想在本地安装重度 CLI 工具，直接利用 API 秘钥调用大模型，可以使用以下两种方式：
 
