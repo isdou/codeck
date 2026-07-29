@@ -1,14 +1,23 @@
 {
   "name": "codeck",
-  "version": "0.1.0",
-  "description": "Codeck: Local MCP Server & CLI context handoff bridge for Codex, Claude Code, and Gemini CLI.",
+  "version": "0.2.0",
+  "description": "Codeck: Local MCP Server & CLI context handoff bridge for Codex, Claude Code, Gemini, Kimi, and Grok.",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README_EN.md"
+  ],
   "bin": {
     "codeck": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node --test test/codeck.test.mjs",
+    "test:gemini-image": "npm run build && node --input-type=module -e \"import assert from 'node:assert/strict'; import { extractGeminiImageParts } from './dist/adapters.js'; const parts = extractGeminiImageParts({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'aGVsbG8=' } }, { inline_data: { mime_type: 'image/jpeg', data: 'd29ybGQ=' } }] } }] }); assert.equal(parts.length, 2); assert.equal(parts[0].mimeType, 'image/png'); assert.equal(parts[1].mimeType, 'image/jpeg');\"",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "prepare": "npm run build"
@@ -19,12 +28,22 @@
     "ai",
     "codex",
     "claude",
-    "gemini"
+    "gemini",
+    "kimi",
+    "grok"
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/isdou/codeck.git"
+  },
+  "bugs": {
+    "url": "https://github.com/isdou/codeck/issues"
+  },
+  "homepage": "https://github.com/isdou/codeck#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.6.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "marked": "^12.0.2",

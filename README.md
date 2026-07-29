@@ -1,8 +1,8 @@
 # Codeck
 
-**Codex-first context handoff for Gemini, Claude Code, and Antigravity CLI.**
+**Codex-first context handoff for Gemini, Claude Code, Kimi Code, Grok Build, and Antigravity CLI.**
 
-在 Codex 里明确说“用 Gemini / Claude / Antigravity 看一下”时，Codeck 才会把当前仓库的 Git 状态、diff、AGENTS 规则和项目说明打包交给对应的本地 AI CLI。  
+在 Codex 里明确说“用 Gemini / Claude / Kimi / Grok / Antigravity 看一下”时，Codeck 才会把当前仓库的 Git 状态、diff、AGENTS 规则和项目说明打包交给对应的本地 AI CLI。
 不用重新解释项目，也不替用户擅自选择模型。
 
 ---
@@ -12,7 +12,7 @@
 ---
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D%2018.0.0-blue.svg)](https://nodejs.org/)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D%2020.0.0-blue.svg)](https://nodejs.org/)
 [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.org)
 
 ![Codeck terminal demo](./assets/demo.gif)
@@ -22,7 +22,7 @@
 作为一个 AI 辅助编程的开发者，你可能：
 1. **超级喜欢 Codex** 的日常流畅体验；
 2. 但偶尔觉得 **Claude Code** 读复杂代码、梳理架构和跑 Review 时更胜一筹；
-3. 又或者在面对大项目、写前端 UI、生成文档文案时，觉得拥有超长上下文的 **Gemini CLI** 或者 **Antigravity CLI** 才是神器。
+3. 又或者在面对大项目、前端 UI、代码 Review 或长上下文任务时，想使用 **Gemini CLI**、**Kimi Code**、**Grok Build** 或 **Antigravity CLI**。
 
 但每次在不同 CLI 工具之间切换，都面临一个巨大痛点：**不得不把项目背景、框架技术栈、甚至当前写了一半的 Diff 代码重新复制一遍，再唠叨地向新 AI 解释一次。**
 
@@ -34,7 +34,7 @@
 ## ✨ 核心特性
 
 - 📦 **零配置上下文打包**：自动提取 Git 状态、Current Diff、项目背景、全局约束规则、相关源文件，融合成标准上下文。
-- 🧭 **显式模型触发**：只有任务里明确提到 Gemini、Claude、Antigravity 等执行器时，才交给对应工具。
+- 🧭 **显式模型触发**：只有任务里明确提到 Gemini、Claude、Kimi、Grok、Antigravity 等执行器时，才交给对应工具。
 - 🔎 **可预览路由 (`pick`)**：不确定会交给谁时，先预览，不直接执行。
 - 📊 **多模型同台竞技 (`compare`)**：输入一条任务，让 Claude 和 Gemini 针对同一上下文分别给出方案，方便对比。
 - 🔌 **Codex MCP 无缝集成**：一次性把 Codeck 注册为 Codex 的 MCP 服务，以后你在 Codex 聊天时输入 `“用 Gemini 帮我分析当前实现”`，Codex 就会在后台自动调用 Codeck，不需要手动切出命令行！
@@ -44,7 +44,7 @@
 ## 🚀 3步极速上手
 
 ### 第一步：安装 Codeck
-确保本地已安装 Node.js（推荐 v18+）。克隆仓库后，在 Codeck 项目根目录执行：
+确保本地已安装 Node.js 20 或更高版本。克隆仓库后，在 Codeck 项目根目录执行：
 
 ```bash
 npm install
@@ -57,9 +57,11 @@ npm link
 codeck doctor
 ```
 
-> 💡 **小贴士**：如果本地没有 Gemini CLI 或 Antigravity CLI，Codeck 可以帮你一键安装：
+> 💡 **小贴士**：Codeck 可以帮你安装已内置支持的 CLI：
 > ```bash
 > codeck install gemini        # 安装 @google/gemini-cli
+> codeck install kimi          # 安装 Kimi Code CLI
+> codeck install grok          # 安装 Grok Build CLI
 > codeck install antigravity   # 安装 Google agy CLI
 > ```
 
@@ -81,6 +83,8 @@ codeck pick "用 Gemini 分析当前 diff 有没有明显问题"
 或者显式指定你要使用的工具：
 ```bash
 codeck ask gemini "分析当前仓库有什么潜在的安全风险"
+codeck ask kimi "梳理这个项目的模块边界"
+codeck ask grok "Review 当前 diff 并按风险排序"
 ```
 
 ---
@@ -154,8 +158,37 @@ keywords = ["architecture", "review", "risk", "架构", "评审", "重构"]
 Codeck 预设了以下 Executor 配置文件：
 - 🧑‍🎨 **`gemini_frontend`**：调用 Gemini，专注前端 UI 优化与大上下文分析。
 - 🏗 **`claude_architect`**：调用 Claude，最适合做深度的架构分析和重构 Review。
+- 🌙 **`kimi`**：调用 Kimi Code CLI，用于仓库探索和长上下文分析。
+- 🚀 **`grok`**：调用 Grok Build CLI，默认带 `read-only` sandbox 进行 Review 和分析。
 - 💻 **`codex_implementer`**：允许写文件和跑 Shell，通常用于将分析好的方案带回 Codex 进行落地编码。
-### 3. 配置 API Key 与直连 API 模式 (New!)
+
+Kimi 官方的 `-p` 模式目前没有与 Grok `--sandbox read-only` 等价的硬隔离参数，因此 Codeck 内置的 `kimi` 是“策略只读”，不应当作 OS 级文件系统沙箱。
+
+### 3. 接入其他 CLI
+
+只要一个 CLI 支持无交互输入和 stdout 输出，就可以通过 `generic` adapter 接入，无需修改 Codeck 的路由层：
+
+```toml
+[agents.qwen]
+command = "qwen"
+adapter = "generic"
+prompt_args = ["-p", "{prompt}"]
+timeout_ms = 180000
+
+[executors.qwen]
+agent = "qwen"
+role = "code_analyst"
+description = "Qwen CLI read-only analysis"
+allowed_modes = ["ask", "subagent", "compare"]
+read_files = true
+write_files = false
+run_shell = false
+context_include = ["README.md", "src/**", "current_diff"]
+```
+
+`{prompt}` 会被替换为 Codeck 打包的完整上下文。如果 CLI 从 stdin 读 prompt，设置 `prompt_args = []`。对通用 CLI，`write_files` / `run_shell` 是 Codeck 的权限声明；还需要在 `prompt_args` 中配置该 CLI 自身的 sandbox / permission 参数，才能形成硬约束。
+
+### 4. 配置 API Key 与直连 API 模式
 如果你想为 CLI 注入自定义 API Key，或者不想在本地安装重度 CLI 工具，直接利用 API 秘钥调用大模型，可以使用以下两种方式：
 
 #### 方式 A：自动加载 `.env` / 配置环境变量
@@ -201,10 +234,12 @@ codex mcp add codeck -- node /Users/yourname/codeck/dist/index.js mcp start
 ```
 
 ### 2. 在 Codex 里自然对话
-配置完成后，只要你在与 Codex 对话时**提到了外部模型的名字**，Codex 就会把任务 delegate 给 Codeck。
+配置完成后，只要你在与 Codex 对话时**提到了已配置外部执行器的名字**，Codex 就会把任务 delegate 给 Codeck。
 
 **例如，你可以对 Codex 说：**
 > *“帮我 review 一下刚才的改动，用 Gemini 分析一下这里有没有潜在的性能瓶颈。”*
+>
+> *“让 Kimi 和 Grok 对比一下当前架构的主要风险。”*
 
 Codex 将在后台调用 Codeck 唤起本地 Gemini CLI，并在对话流中直接呈现 Gemini 给出的专业分析，整个过程上下文丝滑衔接！
 

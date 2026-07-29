@@ -158,6 +158,7 @@ export async function routeTask(
     profile,
     task: input.task,
     context,
+    files: input.files,
   });
 
   const run = saveRun(cwd, {

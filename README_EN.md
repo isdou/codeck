@@ -1,8 +1,8 @@
 # Codeck
 
-**Codex-first context handoff for Gemini, Claude Code, and Antigravity CLI.**
+**Codex-first context handoff for Gemini, Claude Code, Kimi Code, Grok Build, and Antigravity CLI.**
 
-When you explicitly ask Codex to use Gemini, Claude, or Antigravity, Codeck packages the current repo state, diff, AGENTS rules, and project notes for that local AI CLI.  
+When you explicitly ask Codex to use Gemini, Claude, Kimi, Grok, or Antigravity, Codeck packages the current repo state, diff, AGENTS rules, and project notes for that local AI CLI.
 No repeated project explanation. No model choice made behind the user's back.
 
 ---
@@ -12,7 +12,7 @@ No repeated project explanation. No model choice made behind the user's back.
 ---
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D%2018.0.0-blue.svg)](https://nodejs.org/)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D%2020.0.0-blue.svg)](https://nodejs.org/)
 [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.org)
 
 ![Codeck terminal demo](./assets/demo.gif)
@@ -22,7 +22,7 @@ No repeated project explanation. No model choice made behind the user's back.
 As a developer using AI-assisted coding, you might:
 1. **Love the smooth experience of Codex** for your day-to-day coding workflows;
 2. But occasionally prefer **Claude Code** for complex code comprehension, architectural analysis, and reviews;
-3. Or find **Gemini CLI** / **Antigravity CLI** to be a lifesaver for large-context tasks, frontend styling, or writing documentation.
+3. Or use **Gemini CLI**, **Kimi Code**, **Grok Build**, or **Antigravity CLI** for large-context analysis, UI work, and reviews.
 
 However, switching between these CLI tools usually comes with a major pain point: **you have to copy your project context, tech stack, and current git diffs manually, and repeat your project explanation to the new AI.**
 
@@ -34,7 +34,7 @@ Think of Codeck as a **local context handoff bridge for Codex**: it only delegat
 ## ✨ Key Features
 
 - 📦 **Zero-Config Context Packaging**: Automatically aggregates your Git state, uncommitted diffs, project background description, global constraints, and relevant files into a structured markdown context.
-- 🧭 **Explicit Model Triggering**: Delegates only when the task names Gemini, Claude, Antigravity, or another configured executor.
+- 🧭 **Explicit Model Triggering**: Delegates only when the task names Gemini, Claude, Kimi, Grok, Antigravity, or another configured executor.
 - 🔎 **Route Preview (`pick`)**: Preview which executor would run before handing off.
 - 📊 **Multi-Model Compare (`compare`)**: Send a single task to multiple executors (e.g., Claude and Gemini) and compare their solutions side-by-side.
 - 🔌 **Codex MCP Integration**: Add Codeck as an MCP server in Codex. You can query models directly from Codex (e.g. *"Ask Gemini to analyze this performance bottleneck"*), and Codex will run Codeck behind the scenes.
@@ -45,7 +45,7 @@ Think of Codeck as a **local context handoff bridge for Codex**: it only delegat
 ## 🚀 3-Step Quick Start
 
 ### Step 1: Install Codeck
-Ensure you have Node.js (v18+) installed. Clone the repository and run:
+Ensure you have Node.js 20 or later installed. Clone the repository and run:
 
 ```bash
 npm install
@@ -58,9 +58,11 @@ Check if the installation was successful and verify which local AI CLIs are conf
 codeck doctor
 ```
 
-> 💡 **Tip**: If you don't have Gemini or Antigravity CLI installed, Codeck can install them for you:
+> 💡 **Tip**: Codeck can install its built-in CLI integrations for you:
 > ```bash
 > codeck install gemini        # Installs @google/gemini-cli
+> codeck install kimi          # Installs Kimi Code CLI
+> codeck install grok          # Installs Grok Build CLI
 > codeck install antigravity   # Installs Google agy CLI
 > ```
 
@@ -82,6 +84,8 @@ codeck pick "Ask Gemini to review the current diff for obvious issues"
 Or target a specific executor directly:
 ```bash
 codeck ask gemini "Identify any security vulnerabilities in the current changes"
+codeck ask kimi "Map the module boundaries in this repository"
+codeck ask grok "Review the current diff and rank the risks"
 ```
 
 ---
@@ -150,8 +154,37 @@ keywords = ["architecture", "review", "risk", "refactor", "design"]
 ### 2. Built-in Executors
 - 🧑‍🎨 **`gemini_frontend`**: Uses Gemini, optimized for frontend layouts, screenshots, and long-context analysis.
 - 🏗 **`claude_architect`**: Uses Claude, ideal for deep architectural refactoring and code reviews.
+- 🌙 **`kimi`**: Uses Kimi Code CLI for repository exploration and long-context analysis.
+- 🚀 **`grok`**: Uses Grok Build CLI with its `read-only` sandbox for review and analysis.
 - 💻 **`codex_implementer`**: Allows file writes and command executions to apply fixes back into Codex.
-### 3. API Key & Direct REST API (New!)
+
+Kimi's official `-p` mode currently has no hard-isolation flag equivalent to Grok's `--sandbox read-only`. The built-in `kimi` profile is therefore read-only by policy and should not be treated as an OS-level filesystem sandbox.
+
+### 3. Integrating Other CLIs
+
+Any CLI with non-interactive input and stdout output can use the `generic` adapter without changes to Codeck's routing layer:
+
+```toml
+[agents.qwen]
+command = "qwen"
+adapter = "generic"
+prompt_args = ["-p", "{prompt}"]
+timeout_ms = 180000
+
+[executors.qwen]
+agent = "qwen"
+role = "code_analyst"
+description = "Qwen CLI read-only analysis"
+allowed_modes = ["ask", "subagent", "compare"]
+read_files = true
+write_files = false
+run_shell = false
+context_include = ["README.md", "src/**", "current_diff"]
+```
+
+`{prompt}` is replaced with Codeck's packaged context. Set `prompt_args = []` when the CLI reads its prompt from stdin. For generic CLIs, `write_files` and `run_shell` are Codeck permission declarations; add the CLI's own sandbox or permission flags to `prompt_args` when you need hard enforcement.
+
+### 4. API Key & Direct REST API
 You can configure API keys and run tasks directly without installing CLI wrappers:
 
 #### Option A: Auto-Load `.env` / Custom Environment Variables
@@ -197,8 +230,10 @@ codex mcp add codeck -- node /Users/yourname/codeck/dist/index.js mcp start
 ```
 
 ### 2. Conversational Context Hand-off
-Whenever you mention an external model name, Codex will delegate the task to Codeck:
+Whenever you mention a configured external executor, Codex will delegate the task to Codeck:
 > *“Please review my recent changes using Gemini to identify any potential performance bottlenecks.”*
+>
+> *“Ask Kimi and Grok to compare the main architectural risks in the current diff.”*
 
 Codex will invoke Gemini behind the scenes and display the final feedback seamlessly inside your chat.
 

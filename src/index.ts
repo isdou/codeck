@@ -12,6 +12,7 @@ import { writeContextCache } from './context.js';
 import { startMcpServer } from './mcp.js';
 import { compareExecutors, createHandoff, getRun, listExecutors, pickExecutor, routeTask } from './router.js';
 import type { RouteMode } from './models.js';
+import { VERSION } from './version.js';
 
 marked.setOptions({ renderer: new TerminalRenderer() });
 
@@ -20,7 +21,7 @@ const program = new Command();
 program
   .name('codeck')
   .description('Codeck: Codex-first local AI CLI Router MCP server')
-  .version('0.1.0');
+  .version(VERSION);
 
 async function confirmDangerousExecutor(executor: string, yes: boolean) {
   const profile = loadConfig().executors[executor];
@@ -55,6 +56,38 @@ function installGeminiCli() {
     throw new Error(`npm install failed with code ${result.status}.`);
   }
   console.log(chalk.green('Installed Gemini CLI.'));
+}
+
+function installKimiCli() {
+  if (commandExists('kimi')) {
+    console.log(chalk.green('kimi is already installed.'));
+    return;
+  }
+  if (!commandExists('curl') || !commandExists('bash')) {
+    throw new Error('curl and bash are required to install Kimi Code CLI.');
+  }
+  const result = spawnSync('bash', ['-lc', 'curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash'], { stdio: 'inherit' });
+  if (result.status !== 0) {
+    throw new Error(`Kimi Code installer failed with code ${result.status}.`);
+  }
+  console.log(chalk.green('Installed Kimi Code CLI.'));
+  console.log(chalk.gray('Run "kimi login" once if authentication is not configured yet.'));
+}
+
+function installGrokCli() {
+  if (commandExists('grok')) {
+    console.log(chalk.green('grok is already installed.'));
+    return;
+  }
+  if (!commandExists('curl') || !commandExists('bash')) {
+    throw new Error('curl and bash are required to install Grok Build CLI.');
+  }
+  const result = spawnSync('bash', ['-lc', 'curl -fsSL https://x.ai/cli/install.sh | bash'], { stdio: 'inherit' });
+  if (result.status !== 0) {
+    throw new Error(`Grok Build installer failed with code ${result.status}.`);
+  }
+  console.log(chalk.green('Installed Grok Build CLI.'));
+  console.log(chalk.gray('Run "grok login" once if authentication is not configured yet.'));
 }
 
 function installAntigravityCli() {
@@ -127,18 +160,26 @@ program
 program
   .command('install')
   .description('Install supported executor CLIs')
-  .argument('<agent>', 'Currently supported: gemini, antigravity')
+  .argument('<agent>', 'Currently supported: gemini, kimi, grok, antigravity')
   .action((agent: string) => {
     try {
       if (agent === 'gemini') {
         installGeminiCli();
         return;
       }
+      if (agent === 'kimi') {
+        installKimiCli();
+        return;
+      }
+      if (agent === 'grok') {
+        installGrokCli();
+        return;
+      }
       if (agent === 'antigravity' || agent === 'agy') {
         installAntigravityCli();
         return;
       }
-      throw new Error('Only "gemini" and "antigravity" auto-install are supported.');
+      throw new Error('Only "gemini", "kimi", "grok", and "antigravity" auto-install are supported.');
     } catch (err: any) {
       console.error(chalk.red(err.message));
       process.exit(1);

@@ -10,6 +10,14 @@ timeout_ms = 180000
 command = "gemini"
 timeout_ms = 90000
 
+[agents.kimi]
+command = "kimi"
+timeout_ms = 180000
+
+[agents.grok]
+command = "grok"
+timeout_ms = 180000
+
 [agents.antigravity]
 command = "agy"
 timeout_ms = 180000
@@ -29,9 +37,24 @@ ask_context_chars = 16000
 default_executor = "gemini"
 
 [[routing.rules]]
+name = "kimi"
+executor = "kimi"
+keywords = ["kimi", "moonshot", "月之暗面"]
+
+[[routing.rules]]
+name = "grok"
+executor = "grok"
+keywords = ["grok", "xai", "x.ai"]
+
+[[routing.rules]]
 name = "antigravity"
 executor = "antigravity"
 keywords = ["antigravity", "agy"]
+
+[[routing.rules]]
+name = "image"
+executor = "gemini_image"
+keywords = ["image generation", "generate image", "draw image", "gemini image", "turnaround sheet", "生图", "生成图片", "画图", "三视图"]
 
 [[routing.rules]]
 name = "frontend"
