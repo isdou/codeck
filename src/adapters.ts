@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { spawn } from 'child_process';
 import { spawnSync } from 'child_process';
 import type { AdapterCapabilities, AgentConfig, BuiltContext, ExecutorProfile, RunRecord, RunUsage } from './models.js';
@@ -9,6 +11,7 @@ export interface AdapterInvokeInput {
   profile: ExecutorProfile;
   task: string;
   context: BuiltContext;
+  files?: string[];
 }
 
 export interface AdapterInvokeResult {
@@ -107,7 +110,8 @@ function buildPrompt(input: AdapterInvokeInput): string {
 }
 
 function applyPromptArgs(agent: AgentConfig, defaults: string[], prompt: string): string[] {
-  const template = agent.prompt_args?.length ? agent.prompt_args : defaults;
+  // An explicit empty list selects stdin mode for generic CLI integrations.
+  const template = agent.prompt_args ?? defaults;
   return template.map((arg) => arg === '{prompt}' ? prompt : arg);
 }
 
@@ -203,7 +207,6 @@ export const mockAdapter: AgentAdapter = {
   },
 };
 
-
 export const geminiApiAdapter: AgentAdapter = {
   name: 'gemini_api',
   capabilities: { text: true, file: true, image: false, document: true, writeFiles: false, runShell: false },
@@ -248,6 +251,122 @@ export const geminiApiAdapter: AgentAdapter = {
       return { output: text, error: '', exitCode: 0, usage };
     } catch (err: any) {
       return { output: '', error: `Gemini API execution error: ${err.message}`, exitCode: 1 };
+    }
+  },
+};
+
+interface GeminiImagePart {
+  data: string;
+  mimeType: string;
+}
+
+export function extractGeminiImageParts(data: any): GeminiImagePart[] {
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  return parts
+    .map((part: any) => part.inlineData || part.inline_data)
+    .filter(Boolean)
+    .map((inlineData: any) => ({
+      data: inlineData.data,
+      mimeType: inlineData.mimeType || inlineData.mime_type || 'image/png',
+    }))
+    .filter((part: GeminiImagePart) => part.data);
+}
+
+function extractGeminiText(data: any): string {
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  return parts.map((part: any) => part.text).filter(Boolean).join('\n').trim();
+}
+
+function extensionForMime(mimeType: string): string {
+  if (mimeType.includes('jpeg')) return 'jpg';
+  if (mimeType.includes('webp')) return 'webp';
+  return 'png';
+}
+
+function mimeForImageFile(filePath: string): string | null {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.png') return 'image/png';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.webp') return 'image/webp';
+  return null;
+}
+
+function geminiImageInputParts(files: string[] | undefined): any[] {
+  return (files || []).flatMap((file) => {
+    const fullPath = path.resolve(process.cwd(), file);
+    const mimeType = mimeForImageFile(fullPath);
+    if (!mimeType) return [];
+    return [{
+      inlineData: {
+        mimeType,
+        data: fs.readFileSync(fullPath).toString('base64'),
+      },
+    }];
+  });
+}
+
+export const geminiImageAdapter: AgentAdapter = {
+  name: 'gemini_image',
+  capabilities: { text: true, file: true, image: true, document: false, writeFiles: false, runShell: false },
+  probe(agent) {
+    const key = agent.api_key || process.env.GEMINI_API_KEY;
+    return key
+      ? { ok: true, message: 'Gemini API key is configured.' }
+      : { ok: false, message: 'Gemini API key not found. Set GEMINI_API_KEY in .env or config.toml.' };
+  },
+  async invoke(input) {
+    const key = input.agent.api_key || process.env.GEMINI_API_KEY;
+    if (!key) {
+      return { output: '', error: 'Gemini API Key is missing. Please set GEMINI_API_KEY.', exitCode: 1 };
+    }
+
+    const model = input.agent.model || 'gemini-3.1-flash-image';
+    const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent`;
+    const prompt = input.task;
+    const inputParts = geminiImageInputParts(input.files);
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': key,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [...inputParts, { text: prompt }] }],
+          generationConfig: { responseModalities: ['Image'] },
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        return { output: '', error: `Gemini image API request failed (${response.status}): ${errText}`, exitCode: 1 };
+      }
+
+      const data = (await response.json()) as any;
+      const images = extractGeminiImageParts(data);
+      if (!images.length) {
+        const text = extractGeminiText(data);
+        return { output: text, error: `Gemini image API returned no inline image data.${text ? ` Text response: ${text}` : ''}`, exitCode: 1 };
+      }
+
+      const outputDir = path.join(process.cwd(), '.codeck', 'images');
+      fs.mkdirSync(outputDir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const paths = images.map((image, index) => {
+        const filePath = path.join(outputDir, `${stamp}-${index + 1}.${extensionForMime(image.mimeType)}`);
+        fs.writeFileSync(filePath, Buffer.from(image.data, 'base64'));
+        return filePath;
+      });
+      const output = [
+        `Saved ${paths.length} Gemini image${paths.length === 1 ? '' : 's'}:`,
+        ...paths.map((filePath) => `- ${filePath}`),
+      ].join('\n');
+      const usageMetadata = data.usageMetadata;
+      const usage = calculateUsage(prompt, output, model, usageMetadata?.promptTokenCount, usageMetadata?.candidatesTokenCount);
+      return { output, error: '', exitCode: 0, usage };
+    } catch (err: any) {
+      return { output: '', error: `Gemini image API execution error: ${err.message}`, exitCode: 1 };
     }
   },
 };
@@ -312,6 +431,8 @@ export function getAdapter(name: string | undefined): AgentAdapter {
       return mockAdapter;
     case 'gemini_api':
       return geminiApiAdapter;
+    case 'gemini_image':
+      return geminiImageAdapter;
     case 'claude_api':
       return claudeApiAdapter;
     case 'claude':
@@ -320,6 +441,10 @@ export function getAdapter(name: string | undefined): AgentAdapter {
       return makeCliAdapter('gemini', ['--skip-trust', '--approval-mode', 'plan', '--output-format', 'text', '-p', '{prompt}'], { text: true, file: true, image: true, document: true, writeFiles: false, runShell: false }, {
         GEMINI_CLI_TRUST_WORKSPACE: 'true',
       });
+    case 'kimi':
+      return makeCliAdapter('kimi', ['--output-format', 'text', '-p', '{prompt}'], { text: true, file: true, image: true, document: true, writeFiles: false, runShell: false });
+    case 'grok':
+      return makeCliAdapter('grok', ['--no-auto-update', '--permission-mode', 'dontAsk', '--sandbox', 'read-only', '--output-format', 'plain', '-p', '{prompt}'], { text: true, file: true, image: true, document: true, writeFiles: false, runShell: false });
     case 'antigravity':
       return makeCliAdapter('antigravity', ['--dangerously-skip-permissions', '--print-timeout', '120s', '--print', '{prompt}'], { text: true, file: true, image: false, document: true, writeFiles: false, runShell: false });
     case 'codex':

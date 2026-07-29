@@ -7,6 +7,7 @@ import {
 import { runDoctor } from "./config.js";
 import { buildContext, formatContextToMarkdown } from "./context.js";
 import { compareExecutors, createHandoff, CodeckError, getRun, listExecutors, pickExecutor, routeTask } from "./router.js";
+import { VERSION } from "./version.js";
 
 function text(text: string) {
   return { content: [{ type: "text", text }] };
@@ -21,7 +22,7 @@ function errorResult(error: any) {
 
 export async function startMcpServer() {
   const server = new Server(
-    { name: "codeck-mcp", version: "0.1.0" },
+    { name: "codeck-mcp", version: VERSION },
     { capabilities: { tools: {} } },
   );
 

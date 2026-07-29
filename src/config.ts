@@ -8,9 +8,12 @@ const DEFAULT_AGENTS: Record<string, AgentConfig> = {
   codex: { command: 'codex', adapter: 'codex', timeout_ms: 180000 },
   claude: { command: 'claude', adapter: 'claude', timeout_ms: 180000 },
   gemini: { command: 'gemini', adapter: 'gemini', timeout_ms: 90000 },
+  kimi: { command: 'kimi', adapter: 'kimi', timeout_ms: 180000 },
+  grok: { command: 'grok', adapter: 'grok', timeout_ms: 180000 },
   antigravity: { command: 'agy', adapter: 'antigravity', timeout_ms: 180000 },
   mock: { command: 'mock', adapter: 'mock' },
   gemini_api: { command: 'api', adapter: 'gemini_api', timeout_ms: 90000 },
+  gemini_image: { command: 'api', adapter: 'gemini_image', timeout_ms: 180000, model: 'gemini-3.1-flash-image' },
   claude_api: { command: 'api', adapter: 'claude_api', timeout_ms: 180000 },
 };
 
@@ -34,6 +37,36 @@ const DEFAULT_EXECUTORS: Record<string, ExecutorProfile> = {
     write_files: false,
     run_shell: false,
     context_include: ['screenshots/**', 'design/**', 'src/**', 'current_diff'],
+  },
+  kimi: {
+    agent: 'kimi',
+    role: 'code_analyst',
+    description: 'Kimi Code CLI for repository exploration and long-context analysis.',
+    allowed_modes: ['ask', 'subagent', 'compare'],
+    read_files: true,
+    write_files: false,
+    run_shell: false,
+    context_include: ['README.md', 'docs/**', 'src/**', 'current_diff'],
+  },
+  grok: {
+    agent: 'grok',
+    role: 'code_reviewer',
+    description: 'Grok Build CLI in a read-only sandbox for code review and analysis.',
+    allowed_modes: ['ask', 'subagent', 'compare'],
+    read_files: true,
+    write_files: false,
+    run_shell: false,
+    context_include: ['README.md', 'docs/**', 'src/**', 'current_diff'],
+  },
+  gemini_image: {
+    agent: 'gemini_image',
+    role: 'image_generator',
+    description: 'Generate images through the Gemini API and save returned inline image data.',
+    allowed_modes: ['ask', 'subagent', 'delegate', 'compare'],
+    read_files: true,
+    write_files: false,
+    run_shell: false,
+    context_include: ['README.md', 'src/**', 'current_diff'],
   },
   antigravity: {
     agent: 'antigravity',
@@ -103,9 +136,24 @@ const DEFAULT_CONFIG: Config = {
     default_executor: 'gemini',
     rules: [
       {
+        name: 'kimi',
+        executor: 'kimi',
+        keywords: ['kimi', 'moonshot', '月之暗面'],
+      },
+      {
+        name: 'grok',
+        executor: 'grok',
+        keywords: ['grok', 'xai', 'x.ai'],
+      },
+      {
         name: 'antigravity',
         executor: 'antigravity',
         keywords: ['antigravity', 'agy'],
+      },
+      {
+        name: 'image',
+        executor: 'gemini_image',
+        keywords: ['image generation', 'generate image', 'draw image', 'gemini image', 'turnaround sheet', '生图', '生成图片', '画图', '三视图'],
       },
       {
         name: 'frontend',
