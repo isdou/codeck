@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codeck 多模型协作"
+  short_description: "在一个 Coding Agent 中咨询并协调多个外部模型"
+  default_prompt: "Use $codeck to ask multiple configured AI executors for independent reviews and synthesize their conclusions."
