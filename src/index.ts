@@ -2,6 +2,7 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
+import fs from 'fs';
 import { marked } from 'marked';
 import TerminalRenderer from 'marked-terminal';
 import { createInterface } from 'readline/promises';
@@ -10,7 +11,23 @@ import { spawnSync } from 'child_process';
 import { initCodeck, runDoctor, getConfigPath, loadConfig } from './config.js';
 import { writeContextCache } from './context.js';
 import { startMcpServer } from './mcp.js';
-import { compareExecutors, createHandoff, getRun, listExecutors, pickExecutor, routeTask } from './router.js';
+import {
+  cancelRouteTask,
+  compareExecutors,
+  createHandoff,
+  curateRun,
+  deleteRun,
+  exportRuns,
+  getRun,
+  importRuns,
+  listExecutors,
+  listRuns,
+  pickExecutor,
+  publicRun,
+  replayRun,
+  routeTask,
+  waitForRun,
+} from './router.js';
 import type { RouteMode } from './models.js';
 import { VERSION } from './version.js';
 
@@ -349,6 +366,138 @@ program
   .action(async (options) => {
     try {
       console.log(await createHandoff({ mode: options.mode }, { caller: 'cli' }));
+    } catch (err: any) {
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('runs')
+  .description('List archived Codeck runs')
+  .argument('[query]', 'Optional search text')
+  .option('-s, --status <status>', 'Filter by run status')
+  .option('-e, --executor <executor>', 'Filter by executor')
+  .option('-c, --curated', 'Only curated knowledge runs')
+  .option('-n, --limit <limit>', 'Maximum number of runs', '20')
+  .action((query: string | undefined, options) => {
+    try {
+      const records = listRuns({
+        query,
+        status: options.status,
+        executor: options.executor,
+        curated: options.curated ? true : undefined,
+        limit: Number(options.limit),
+      });
+      if (!records.length) {
+        console.log(chalk.yellow('No archived Codeck runs found.'));
+        return;
+      }
+      for (const run of records) {
+        console.log(`${run.id}  ${run.status || 'unknown'}  ${run.executor}  ${run.task.slice(0, 100)}`);
+      }
+    } catch (err: any) {
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('run')
+  .description('Show one archived Codeck run')
+  .argument('<runId>', 'Run id')
+  .option('--content', 'Include the redacted prompt and context snapshot')
+  .action((runIdValue: string, options) => {
+    const run = getRun(runIdValue);
+    if (!run) {
+      console.log(chalk.yellow('No Codeck run found.'));
+      return;
+    }
+    console.log(JSON.stringify(options.content ? run : publicRun(run), null, 2));
+  });
+
+program
+  .command('wait')
+  .description('Wait for a pending Codeck run')
+  .argument('<runId>', 'Run id')
+  .option('-t, --timeout <ms>', 'Maximum wait in milliseconds', '40000')
+  .action(async (runIdValue: string, options) => {
+    const requestedTimeout = Number(options.timeout);
+    const timeout = Number.isFinite(requestedTimeout) ? Math.min(Math.max(requestedTimeout, 0), 45000) : 40000;
+    const run = await waitForRun(runIdValue, process.cwd(), timeout);
+    console.log(run ? JSON.stringify(publicRun(run), null, 2) : 'No Codeck run found.');
+  });
+
+program
+  .command('cancel')
+  .description('Cancel a pending Codeck run')
+  .argument('<runId>', 'Run id')
+  .action((runIdValue: string) => {
+    const run = cancelRouteTask(runIdValue);
+    console.log(run ? JSON.stringify(publicRun(run), null, 2) : 'No active Codeck run found.');
+  });
+
+program
+  .command('curate')
+  .description('Mark an archived run as reusable knowledge')
+  .argument('<runId>', 'Run id')
+  .option('--tag <tag...>', 'Knowledge tags')
+  .option('--note <note>', 'Curator note')
+  .action((runIdValue: string, options) => {
+    const run = curateRun(runIdValue, { tags: options.tag, note: options.note });
+    console.log(run ? JSON.stringify(publicRun(run), null, 2) : 'No archived Codeck run found.');
+  });
+
+program
+  .command('delete-run')
+  .description('Delete one archived Codeck run')
+  .argument('<runId>', 'Run id')
+  .option('-y, --yes', 'Confirm permanent deletion')
+  .action((runIdValue: string, options) => {
+    try {
+      if (!options.yes) throw new Error('Pass --yes after verifying the run id to permanently delete it.');
+      console.log(deleteRun(runIdValue) ? 'Archived Codeck run deleted.' : 'No archived Codeck run found.');
+    } catch (err: any) {
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('export')
+  .description('Export the project-local Codeck archive')
+  .option('-f, --format <format>', 'json or markdown', 'json')
+  .option('-o, --output <path>', 'Write to a file instead of stdout')
+  .action((options) => {
+    const format = options.format === 'markdown' ? 'markdown' : 'json';
+    const content = exportRuns(format);
+    if (options.output) {
+      fs.writeFileSync(options.output, content, { encoding: 'utf8', mode: 0o600 });
+      console.log(chalk.green(`Archive exported to ${options.output}`));
+    } else {
+      console.log(content);
+    }
+  });
+
+program
+  .command('import-runs')
+  .description('Import legacy .codeck/runs JSON records into the archive')
+  .action(() => console.log(`Imported ${importRuns()} legacy run(s).`));
+
+program
+  .command('replay')
+  .description('Replay an archived run')
+  .argument('<runId>', 'Run id')
+  .option('--current-context', 'Rebuild context from the current project instead of the historical snapshot')
+  .option('-y, --yes', 'Confirm writable/shell-enabled executor')
+  .action(async (runIdValue: string, options) => {
+    try {
+      const source = getRun(runIdValue);
+      if (!source) throw new Error(`Run "${runIdValue}" was not found.`);
+      await confirmDangerousExecutor(source.executor, Boolean(options.yes));
+      const run = await replayRun(runIdValue, { caller: 'cli', currentContext: Boolean(options.currentContext) });
+      console.log(run.output || JSON.stringify(publicRun(run), null, 2));
+      printRunSummary(run);
     } catch (err: any) {
       console.error(chalk.red(err.message));
       process.exit(1);

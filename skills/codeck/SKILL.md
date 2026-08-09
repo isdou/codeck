@@ -21,6 +21,12 @@ Use Codeck as the execution bridge while the current coding agent remains the ho
 - Use `delegate` only when the user explicitly asks an external executor to implement changes.
 - Use `pick` before `auto` when routing is uncertain.
 
+When a routed tool result has `status: "running"` or `status: "pending"`, treat it as an
+in-progress job rather than a model answer. Call `wait_run` in bounded intervals (no more than
+45 seconds per call) until the run is terminal, then use its `output`. A short MCP call can be
+cut off by the host while Agy or another executor continues in the background; use the returned
+`runId` to recover the final answer.
+
 Never describe one model playing several roles as multi-model consensus. Label it `single-model-multi-role`.
 
 ## Preflight
@@ -69,6 +75,14 @@ Read [references/moderation.md](references/moderation.md) for role prompts, disa
 - Do not hardcode current model IDs. Discover or read them from local configuration because provider model names change.
 - If fewer than two distinct providers are available, continue only as a single-model consultation and state the limitation.
 - Preserve raw external outputs or Codeck run IDs so the synthesis remains auditable.
+- Codeck archives each routed request inside the project. Use `list_runs` or `search_runs` to
+  find prior work, and `get_run(includeContent=true)` only when the redacted prompt/context is
+  actually needed. Do not inject archive history automatically into a new handoff.
+- When a run is genuinely reusable knowledge, call `curate_run` with focused tags and a note.
+  Curation is explicit; do not mark every historical run as knowledge.
+- Use `replay_run` only when the user wants a new model call. Historical-snapshot replay is the
+  default; `currentContext=true` is an explicit alternative. Every replay creates a new linked
+  run.
 
 ## Return the result
 

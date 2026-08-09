@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "codeck": {
+      "cwd": ".",
+      "command": "node",
+      "args": [
+        "./dist/index.js",
+        "mcp",
+        "start"
+      ]
+    }
+  }
+}

@@ -1,9 +1,22 @@
 import fs from 'fs';
 import path from 'path';
-import { getAdapter, formatRunMarkdown } from './adapters.js';
+import { getAdapter, formatRunMarkdown, prepareAdapterRequest } from './adapters.js';
+import type { AdapterProgress, PreparedAdapterRequest } from './adapters.js';
+import {
+  archiveRun,
+  curateArchivedRun,
+  deleteArchivedRun,
+  exportArchive,
+  getArchivedRun,
+  importLegacyRuns,
+  listArchivedRuns,
+  redactRunForStorage,
+  type ArchiveFilter,
+  type ArchiveMetadataUpdate,
+} from './archive.js';
 import { getCodeckDir, loadConfig } from './config.js';
 import { buildContext } from './context.js';
-import type { CompareExecutorsInput, Config, HandoffMode, RouteMode, RouteRule, RouteTaskInput, RunRecord, RunUsage } from './models.js';
+import type { BuiltContext, CompareExecutorsInput, Config, HandoffMode, RouteMode, RouteRule, RouteTaskInput, RunRecord, RunStatus, RunUsage } from './models.js';
 
 export class CodeckError extends Error {
   constructor(public code: string, message: string, public details: Record<string, unknown> = {}) {
@@ -19,6 +32,13 @@ function runsDir(cwd: string): string {
   return path.join(getCodeckDir(cwd), 'runs');
 }
 
+function legacyRunPath(cwd: string, id: string, extension: 'json' | 'md'): string | null {
+  if (!id || path.basename(id) !== id) return null;
+  const root = path.resolve(runsDir(cwd));
+  const filePath = path.resolve(root, `${id}.${extension}`);
+  return filePath.startsWith(`${root}${path.sep}`) ? filePath : null;
+}
+
 function latestRunJson(cwd: string): string | null {
   const dir = runsDir(cwd);
   if (!fs.existsSync(dir)) return null;
@@ -29,21 +49,69 @@ function latestRunJson(cwd: string): string | null {
   return files[files.length - 1] || null;
 }
 
-function saveRun(cwd: string, run: Omit<RunRecord, 'logPath' | 'jsonPath'>): RunRecord {
+function terminalStatus(run: RunRecord): RunStatus {
+  if (run.status) return run.status;
+  if (run.exitCode === null || run.exitCode === undefined) return 'running';
+  if (run.exitCode === 0) return 'succeeded';
+  if (run.exitCode === 124) return 'timeout';
+  return 'failed';
+}
+
+function legacyRun(run: RunRecord): RunRecord {
+  const copy = JSON.parse(JSON.stringify(run)) as RunRecord;
+  // Keep the pre-archive run format useful without adding a second unredacted
+  // copy of the full prompt/context to the legacy JSON/Markdown files.
+  delete copy.prompt;
+  delete copy.invocationPrompt;
+  delete copy.contextSnapshot;
+  delete copy.partialOutput;
+  delete copy.stderr;
+  delete copy.payloadRefs;
+  return copy;
+}
+
+function saveRun(cwd: string, run: Omit<RunRecord, 'logPath' | 'jsonPath'>, config?: Config): RunRecord {
   fs.mkdirSync(runsDir(cwd), { recursive: true });
   const jsonPath = path.join(runsDir(cwd), `${run.id}.json`);
   const logPath = path.join(runsDir(cwd), `${run.id}.md`);
   const fullRun: RunRecord = { ...run, jsonPath, logPath };
-  fs.writeFileSync(jsonPath, JSON.stringify(fullRun, null, 2), 'utf8');
-  fs.writeFileSync(logPath, formatRunMarkdown(fullRun), 'utf8');
-  fs.writeFileSync(path.join(getCodeckDir(cwd), 'last.md'), fullRun.output, 'utf8');
+  const persisted = config ? redactRunForStorage(fullRun, config.archive) : fullRun;
+  const persistedLegacy = legacyRun(persisted);
+  fs.writeFileSync(jsonPath, JSON.stringify(persistedLegacy, null, 2), { encoding: 'utf8', mode: 0o600 });
+  fs.writeFileSync(logPath, formatRunMarkdown(persistedLegacy), { encoding: 'utf8', mode: 0o600 });
+  fs.writeFileSync(path.join(getCodeckDir(cwd), 'last.md'), persisted.output || persisted.partialOutput || '', { encoding: 'utf8', mode: 0o600 });
+  if (config) {
+    try {
+      archiveRun(cwd, fullRun, config.archive);
+    } catch (error: any) {
+      // Archiving is best-effort and must never prevent the external model
+      // from returning its result. The failure remains visible in stderr.
+      console.error(`[Codeck archive] ${error?.message || error}`);
+    }
+  }
   return fullRun;
 }
 
 export function getRun(runIdValue?: string, cwd: string = process.cwd()): RunRecord | null {
-  const jsonPath = runIdValue ? path.join(runsDir(cwd), `${runIdValue}.json`) : latestRunJson(cwd);
+  if (runIdValue) {
+    const archived = getArchivedRun(cwd, runIdValue);
+    if (archived) return archived;
+  }
+  const jsonPath = runIdValue ? legacyRunPath(cwd, runIdValue, 'json') : latestRunJson(cwd);
   if (!jsonPath || !fs.existsSync(jsonPath)) return null;
-  return JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as RunRecord;
+  const record = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as RunRecord;
+  return { ...record, status: terminalStatus(record) };
+}
+
+export function publicRun(run: RunRecord): RunRecord {
+  const copy = JSON.parse(JSON.stringify(run)) as RunRecord;
+  delete copy.prompt;
+  delete copy.invocationPrompt;
+  delete copy.contextSnapshot;
+  delete copy.stderr;
+  delete copy.redactions;
+  delete copy.payloadRefs;
+  return copy;
 }
 
 function assertTask(task: string | undefined): asserts task is string {
@@ -105,10 +173,36 @@ function sumUsage(runs: RunRecord[]): RunUsage | undefined {
   };
 }
 
-export async function routeTask(
+interface RouteExecutionOptions {
+  cwd?: string;
+  caller?: 'cli' | 'mcp';
+  allowOverBudget?: boolean;
+  contextOverride?: BuiltContext;
+  preparedOverride?: PreparedAdapterRequest;
+  waitMs?: number;
+}
+
+interface ActiveJob {
+  controller: AbortController;
+  promise: Promise<RunRecord>;
+}
+
+const activeJobs = new Map<string, ActiveJob>();
+const completedJobs = new Map<string, RunRecord>();
+
+function validateRoute(
   input: RouteTaskInput,
-  options: { cwd?: string; caller?: 'cli' | 'mcp'; allowOverBudget?: boolean } = {},
-): Promise<RunRecord> {
+  options: RouteExecutionOptions,
+): {
+  cwd: string;
+  config: Config;
+  executor: string;
+  profile: Config['executors'][string];
+  agent: Config['agents'][string];
+  context: BuiltContext;
+  maxContext: number;
+  prepared: PreparedAdapterRequest;
+} {
   const cwd = options.cwd || process.cwd();
   const config = loadConfig(cwd);
   assertTask(input.task);
@@ -116,7 +210,6 @@ export async function routeTask(
   const executor = input.executor && input.executor !== 'auto'
     ? input.executor
     : resolveExecutor(config, input.task, input.mode, options.caller);
-
   const profile = config.executors[executor];
   if (!profile) {
     throw new CodeckError('executor_not_found', `Executor "${executor}" is not configured.`, {
@@ -141,8 +234,8 @@ export async function routeTask(
   const maxContext = input.mode === 'ask' && !input.files?.length && !options.allowOverBudget
     ? Math.min(config.budget.ask_context_chars, maxConfiguredContext)
     : maxConfiguredContext;
-  const context = buildContext(cwd, { task: input.task, executor: profile, files: input.files, maxChars: maxContext });
-  if (context.summary.chars > maxContext && !options.allowOverBudget) {
+  const context = options.contextOverride || buildContext(cwd, { task: input.task, executor: profile, files: input.files, maxChars: maxContext });
+  if (context.summary.chars > maxContext && !options.allowOverBudget && !options.contextOverride) {
     throw new CodeckError('budget_exceeded', 'Context exceeds configured budget.', {
       actual: context.summary.chars,
       max: maxContext,
@@ -150,8 +243,7 @@ export async function routeTask(
     });
   }
 
-  const adapter = getAdapter(agent.adapter);
-  const result = await adapter.invoke({
+  const adapterInput = {
     agentName: profile.agent,
     agent,
     executorName: executor,
@@ -159,31 +251,275 @@ export async function routeTask(
     task: input.task,
     context,
     files: input.files,
-  });
+    cwd,
+  };
+  const prepared = options.preparedOverride || prepareAdapterRequest(adapterInput);
+  return { cwd, config, executor, profile, agent, context, maxContext, prepared };
+}
 
-  const run = saveRun(cwd, {
-    id: runId(),
-    date: new Date().toISOString(),
+async function executeRouteJob(
+  initial: RunRecord,
+  route: ReturnType<typeof validateRoute>,
+  input: RouteTaskInput,
+  controller: AbortController,
+): Promise<RunRecord> {
+  let output = initial.partialOutput || '';
+  let stderr = initial.stderr || '';
+  let lastPersistAt = 0;
+  let progressTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const persistProgress = () => {
+    progressTimer = null;
+    const progressRun: RunRecord = {
+      ...initial,
+      status: 'running',
+      output: '',
+      partialOutput: output,
+      stderr,
+      error: stderr,
+      updatedAt: new Date().toISOString(),
+    };
+    lastPersistAt = Date.now();
+    saveRun(route.cwd, progressRun, route.config);
+  };
+
+  const onProgress = (progress: AdapterProgress) => {
+    if (typeof progress.output === 'string') output = progress.output;
+    if (typeof progress.error === 'string') stderr = progress.error;
+    const elapsed = Date.now() - lastPersistAt;
+    if (elapsed >= route.config.archive.progress_interval_ms) {
+      persistProgress();
+    } else if (!progressTimer) {
+      progressTimer = setTimeout(persistProgress, Math.max(100, route.config.archive.progress_interval_ms - elapsed));
+    }
+  };
+
+  try {
+    const result = await getAdapter(route.agent.adapter).invoke({
+      agentName: route.profile.agent,
+      agent: route.agent,
+      executorName: route.executor,
+      profile: route.profile,
+      task: input.task,
+      context: route.context,
+      files: input.files,
+      cwd: route.cwd,
+      signal: controller.signal,
+      onProgress,
+      prepared: route.prepared,
+    });
+    if (progressTimer) clearTimeout(progressTimer);
+    output = result.output || output;
+    stderr = result.stderr || result.error || stderr;
+    const status: RunStatus = controller.signal.aborted
+      ? 'cancelled'
+      : result.exitCode === 0
+        ? 'succeeded'
+        : result.exitCode === 124
+          ? 'timeout'
+          : 'failed';
+    const finished: RunRecord = {
+      ...initial,
+      status,
+      output,
+      partialOutput: '',
+      error: result.error,
+      stderr,
+      exitCode: controller.signal.aborted ? 130 : result.exitCode,
+      usage: result.usage,
+      prompt: result.prompt || initial.prompt,
+      invocationPrompt: result.invocationPrompt || initial.invocationPrompt,
+      contextSnapshot: result.contextSnapshot || initial.contextSnapshot,
+      completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    return saveRun(route.cwd, finished, route.config);
+  } catch (error: any) {
+    if (progressTimer) clearTimeout(progressTimer);
+    const failed: RunRecord = {
+      ...initial,
+      status: controller.signal.aborted ? 'cancelled' : 'failed',
+      output,
+      partialOutput: '',
+      error: error?.message || String(error),
+      stderr,
+      exitCode: controller.signal.aborted ? 130 : 1,
+      completedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    return saveRun(route.cwd, failed, route.config);
+  }
+}
+
+export async function startRouteTask(
+  input: RouteTaskInput,
+  options: RouteExecutionOptions = {},
+): Promise<RunRecord> {
+  const route = validateRoute(input, options);
+  const controller = new AbortController();
+  const timestamp = new Date().toISOString();
+  const id = runId();
+  const initial: RunRecord = {
+    id,
+    date: timestamp,
     host: input.host || (options.caller === 'cli' ? 'cli' : 'codex'),
     mode: input.mode,
-    executor,
-    agent: profile.agent,
+    executor: route.executor,
+    agent: route.profile.agent,
+    adapter: route.agent.adapter || route.agent.command,
+    model: route.agent.model || route.agent.adapter || route.agent.command,
     task: input.task,
-    output: result.output,
-    error: result.error,
-    exitCode: result.exitCode,
-    contextSummary: context.summary,
+    output: '',
+    error: '',
+    exitCode: null,
+    logPath: path.join(runsDir(route.cwd), `${id}.md`),
+    jsonPath: path.join(runsDir(route.cwd), `${id}.json`),
+    contextSummary: route.context.summary,
     budget: {
-      max: maxContext,
-      actual: context.summary.chars,
-      exceeded: context.summary.chars > maxContext,
+      max: route.maxContext,
+      actual: route.context.summary.chars,
+      exceeded: route.context.summary.chars > route.maxContext,
     },
-    usage: result.usage,
-  });
+    status: 'running',
+    startedAt: timestamp,
+    updatedAt: timestamp,
+    prompt: route.prepared.prompt,
+    invocationPrompt: route.prepared.invocationPrompt,
+    contextSnapshot: route.prepared.materializedContext || route.context.markdown,
+    partialOutput: '',
+    stderr: '',
+    archiveVersion: 1,
+    sourceConversationId: input.sourceConversationId,
+    parentRunId: input.parentRunId,
+    projectPath: route.cwd,
+    attachedFiles: route.prepared.attachedFiles?.map((file) => ({ path: file })),
+  };
+  const saved = saveRun(route.cwd, initial, route.config);
+  const promise = executeRouteJob(saved, route, input, controller);
+  activeJobs.set(id, { controller, promise });
+  void promise.then((completed) => {
+    completedJobs.set(id, completed);
+    const cleanupTimer = setTimeout(() => completedJobs.delete(id), 60000);
+    cleanupTimer.unref?.();
+  }).finally(() => activeJobs.delete(id)).catch(() => undefined);
+  return saved;
+}
 
-  if (run.exitCode !== 0) {
+export async function waitForRun(
+  runIdValue: string,
+  cwd: string = process.cwd(),
+  timeoutMs?: number,
+): Promise<RunRecord | null> {
+  const started = Date.now();
+  const limit = timeoutMs === undefined ? Number.POSITIVE_INFINITY : Math.max(0, timeoutMs);
+  while (true) {
+    const run = getRun(runIdValue, cwd);
+    if (!run) return null;
+    const status = terminalStatus(run);
+    if (status !== 'running' && status !== 'pending') return { ...run, status };
+    if (Date.now() - started >= limit) return { ...run, status };
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+export function cancelRouteTask(runIdValue: string, cwd: string = process.cwd()): RunRecord | null {
+  const job = activeJobs.get(runIdValue);
+  if (job) job.controller.abort();
+  return getRun(runIdValue, cwd);
+}
+
+export function listRuns(filter: ArchiveFilter = {}, cwd: string = process.cwd()): RunRecord[] {
+  return listArchivedRuns(cwd, filter);
+}
+
+export function curateRun(
+  runIdValue: string,
+  update: ArchiveMetadataUpdate,
+  cwd: string = process.cwd(),
+): RunRecord | null {
+  const config = loadConfig(cwd);
+  return curateArchivedRun(cwd, runIdValue, update, config.archive);
+}
+
+export function deleteRun(runIdValue: string, cwd: string = process.cwd()): boolean {
+  const deletedArchive = deleteArchivedRun(cwd, runIdValue);
+  // The legacy files are intentionally metadata-only now, but removing them
+  // prevents getRun() from resurrecting a record after archive deletion.
+  let deletedLegacy = false;
+  for (const extension of ['json', 'md'] as const) {
+    const filePath = legacyRunPath(cwd, runIdValue, extension);
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      deletedLegacy = true;
+    }
+  }
+  return deletedArchive || deletedLegacy;
+}
+
+export function exportRuns(
+  format: 'json' | 'markdown' = 'json',
+  filter: ArchiveFilter = {},
+  cwd: string = process.cwd(),
+): string {
+  return exportArchive(cwd, format, filter);
+}
+
+export function importRuns(cwd: string = process.cwd()): number {
+  const config = loadConfig(cwd);
+  return importLegacyRuns(cwd, config.archive);
+}
+
+export async function replayRun(
+  runIdValue: string,
+  options: RouteExecutionOptions & { currentContext?: boolean } = {},
+): Promise<RunRecord> {
+  const cwd = options.cwd || process.cwd();
+  const source = getArchivedRun(cwd, runIdValue) || getRun(runIdValue, cwd);
+  if (!source) throw new CodeckError('run_not_found', `Run "${runIdValue}" was not found.`);
+  if (source.mode === 'compare') {
+    throw new CodeckError('aggregate_not_replayable', 'Compare aggregate runs are not replayable; replay an individual child run.');
+  }
+
+  const files = source.attachedFiles?.map((file) => file.path);
+  const replayInput: RouteTaskInput = {
+    host: options.caller === 'cli' ? 'cli' : 'codex',
+    mode: source.mode,
+    executor: source.executor,
+    task: source.task,
+    files,
+    parentRunId: source.id,
+  };
+  if (options.currentContext) return routeTask(replayInput, options);
+
+  const contextSnapshot = source.contextSnapshot || '';
+  const contextOverride: BuiltContext = {
+    markdown: contextSnapshot,
+    resources: [],
+    summary: source.contextSummary,
+  };
+  const preparedOverride: PreparedAdapterRequest = {
+    prompt: source.prompt || contextSnapshot,
+    invocationPrompt: source.invocationPrompt || source.prompt || contextSnapshot,
+    materializedContext: contextSnapshot,
+    attachedFiles: files,
+  };
+  return routeTask(replayInput, { ...options, cwd, contextOverride, preparedOverride });
+}
+
+export async function routeTask(
+  input: RouteTaskInput,
+  options: RouteExecutionOptions = {},
+): Promise<RunRecord> {
+  const cwd = options.cwd || process.cwd();
+  const config = loadConfig(cwd);
+  const initial = await startRouteTask(input, options);
+  const waitMs = options.waitMs ?? (options.caller === 'mcp' ? Math.min(config.archive.async_threshold_ms, 45000) : undefined);
+  const waited = await waitForRun(initial.id, cwd, waitMs);
+  const run = completedJobs.get(initial.id) || waited || initial;
+
+  if (terminalStatus(run) !== 'running' && terminalStatus(run) !== 'pending' && run.exitCode !== 0) {
     const detail = (run.error || run.output || '').trim();
-    throw new CodeckError('executor_failed', `Executor "${executor}" exited with code ${run.exitCode}.${detail ? `\n${detail.slice(0, 1200)}` : ''}`, {
+    throw new CodeckError('executor_failed', `Executor "${run.executor}" exited with code ${run.exitCode}.${detail ? `\n${detail.slice(0, 1200)}` : ''}`, {
       runId: run.id,
       exitCode: run.exitCode,
       error: run.error,
@@ -204,29 +540,49 @@ export async function compareExecutors(
   const runs: RunRecord[] = [];
   const errors: string[] = [];
 
-  for (const executor of input.executors) {
-    try {
-      runs.push(await routeTask({
-        host: input.host,
-        mode: 'compare',
-        executor,
-        task: input.task,
-        files: input.files,
-      }, { ...options, cwd }));
-    } catch (err: any) {
-      errors.push(`## ${executor}\nError: ${err.message}`);
+  const routeInput = (executor: string): RouteTaskInput => ({
+    host: input.host,
+    mode: 'compare',
+    executor,
+    task: input.task,
+    files: input.files,
+  });
+
+  if (options.caller === 'mcp') {
+    // Start all compare children together so the MCP caller does not spend
+    // 45 seconds on each model before seeing the pending run IDs.
+    const started = await Promise.all(input.executors.map((executor) => startRouteTask(routeInput(executor), { ...options, cwd })));
+    const waited = await Promise.all(started.map((run) => waitForRun(run.id, cwd, config.archive.async_threshold_ms)));
+    for (const [index, run] of waited.entries()) {
+      const fallback = started[index];
+      if (run) runs.push(run);
+      else errors.push(`## ${input.executors[index]}\nError: run ${fallback.id} disappeared.`);
+    }
+  } else {
+    for (const executor of input.executors) {
+      try {
+        runs.push(await routeTask(routeInput(executor), { ...options, cwd }));
+      } catch (err: any) {
+        errors.push(`## ${executor}\nError: ${err.message}`);
+      }
     }
   }
 
   const output = [
     '# Codeck Compare Result',
-    ...runs.map((run) => `## ${run.executor}\n\n${run.output.trim() || '(no output)'}`),
+    ...runs.map((run) => {
+      const body = run.status === 'running' || run.status === 'pending'
+        ? `Pending. Poll run \`${run.id}\` with wait_run.`
+        : (run.output || '(no output)');
+      return `## ${run.executor} · ${run.status || 'unknown'}\n\n${body}`;
+    }),
     ...errors,
     '',
     '## Handoff Notes',
     'Review agreement, conflicts, and choose the next Codex action.',
   ].join('\n\n');
 
+  const pending = runs.filter((run) => terminalStatus(run) === 'running' || terminalStatus(run) === 'pending');
   const aggregateRun = saveRun(cwd, {
     id: runId(),
     date: new Date().toISOString(),
@@ -237,7 +593,7 @@ export async function compareExecutors(
     task: input.task,
     output,
     error: errors.join('\n'),
-    exitCode: errors.length ? 1 : 0,
+    exitCode: pending.length ? null : (errors.length ? 1 : 0),
     contextSummary: {
       chars: output.length,
       resourceCount: runs.length,
@@ -250,7 +606,39 @@ export async function compareExecutors(
       exceeded: output.length > config.budget.max_context_chars,
     },
     usage: sumUsage(runs),
-  });
+    status: pending.length ? 'running' : (errors.length ? 'failed' : 'succeeded'),
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }, config);
+
+  if (pending.length) {
+    void Promise.all(pending.map((run) => waitForRun(run.id, cwd)))
+      .then((completed) => {
+        const finalRuns = completed.filter(Boolean) as RunRecord[];
+        const finalErrors = finalRuns.filter((run) => terminalStatus(run) !== 'succeeded');
+        const finalOutput = [
+          '# Codeck Compare Result',
+          ...finalRuns.map((run) => `## ${run.executor} · ${run.status || 'unknown'}\n\n${run.output || '(no output)'}`),
+          ...errors,
+          '',
+          '## Handoff Notes',
+          'Review agreement, conflicts, and choose the next Codex action.',
+        ].join('\n\n');
+        saveRun(cwd, {
+          ...aggregateRun,
+          output: finalOutput,
+          error: [...errors, ...finalErrors.map((run) => `${run.executor}: ${run.error}`)].join('\n'),
+          exitCode: finalErrors.length || errors.length ? 1 : 0,
+          status: finalErrors.length || errors.length ? 'failed' : 'succeeded',
+          updatedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          contextSummary: { ...aggregateRun.contextSummary, chars: finalOutput.length },
+          budget: { ...aggregateRun.budget, actual: finalOutput.length, exceeded: finalOutput.length > aggregateRun.budget.max },
+          usage: sumUsage(finalRuns),
+        }, config);
+      })
+      .catch(() => undefined);
+  }
 
   return { runs, output, run: aggregateRun };
 }

@@ -1,6 +1,6 @@
 {
   "name": "codeck",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Codeck: Local MCP Server & CLI context handoff bridge for Codex, Claude Code, Gemini, Kimi, and Grok.",
   "type": "module",
   "engines": {
@@ -9,7 +9,12 @@
   "main": "dist/index.js",
   "files": [
     "dist",
-    "README_EN.md"
+    "README_EN.md",
+    "skills",
+    ".codex-plugin",
+    ".mcp.json",
+    "plugin.json",
+    "mcp_config.json"
   ],
   "bin": {
     "codeck": "./dist/index.js"
