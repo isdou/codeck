@@ -1,6 +1,6 @@
 {
   "name": "codeck",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Route explicit Codex requests to local AI executors and keep a project-local, redacted archive of every handoff.",
   "author": {
     "name": "isdou"

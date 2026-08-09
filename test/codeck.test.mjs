@@ -29,6 +29,11 @@ test('Kimi and Grok adapters and routes are built in', () => {
   assert.equal(DEFAULT_CONFIG.executors.grok.run_shell, false);
 });
 
+test('Antigravity is the maintained default Google CLI path', () => {
+  assert.equal(DEFAULT_CONFIG.routing.default_executor, 'antigravity');
+  assert.equal(DEFAULT_CONFIG.executors.gemini_frontend.agent, 'antigravity');
+});
+
 test('Antigravity adapter pins the configured agent instead of using the regional planner', async () => {
   const profile = {
     agent: 'antigravity',

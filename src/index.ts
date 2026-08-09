@@ -61,6 +61,8 @@ function commandExists(command: string): boolean {
 }
 
 function installGeminiCli() {
+  console.log(chalk.yellow('Gemini CLI is now a legacy path for individual accounts. Prefer "codeck install antigravity" for Google CLI access through Agy.'));
+  console.log(chalk.gray('Enterprise Gemini Code Assist licenses and paid Gemini API-key access remain supported by Google.'));
   if (commandExists('gemini')) {
     console.log(chalk.green('gemini is already installed.'));
     return;
@@ -177,7 +179,7 @@ program
 program
   .command('install')
   .description('Install supported executor CLIs')
-  .argument('<agent>', 'Currently supported: gemini, kimi, grok, antigravity')
+  .argument('<agent>', 'Currently supported: antigravity, gemini (legacy), kimi, grok')
   .action((agent: string) => {
     try {
       if (agent === 'gemini') {
@@ -196,7 +198,7 @@ program
         installAntigravityCli();
         return;
       }
-      throw new Error('Only "gemini", "kimi", "grok", and "antigravity" auto-install are supported.');
+      throw new Error('Only "antigravity", "gemini", "kimi", and "grok" auto-install are supported.');
     } catch (err: any) {
       console.error(chalk.red(err.message));
       process.exit(1);
