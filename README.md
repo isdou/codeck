@@ -1,6 +1,6 @@
 # Codeck
 
-**Codex-first context handoff for Gemini, Claude Code, Kimi Code, Grok Build, and Antigravity CLI.**
+**Codex-first context handoff for Gemini API/legacy CLI, Claude Code, Kimi Code, Grok Build, and Antigravity CLI.**
 
 在 Codex 里明确说“用 Gemini / Claude / Kimi / Grok / Antigravity 看一下”时，Codeck 才会把当前仓库的 Git 状态、diff、AGENTS 规则和项目说明打包交给对应的本地 AI CLI。
 不用重新解释项目，也不替用户擅自选择模型。
@@ -31,7 +31,7 @@ npx skills add https://github.com/isdou/codeck --skill codeck
 作为一个 AI 辅助编程的开发者，你可能：
 1. **超级喜欢 Codex** 的日常流畅体验；
 2. 但偶尔觉得 **Claude Code** 读复杂代码、梳理架构和跑 Review 时更胜一筹；
-3. 又或者在面对大项目、前端 UI、代码 Review 或长上下文任务时，想使用 **Gemini CLI**、**Kimi Code**、**Grok Build** 或 **Antigravity CLI**。
+3. 又或者在面对大项目、前端 UI、代码 Review 或长上下文任务时，想使用 **Gemini API/企业版 CLI**、**Kimi Code**、**Grok Build** 或 **Antigravity CLI**。
 
 但每次在不同 CLI 工具之间切换，都面临一个巨大痛点：**不得不把项目背景、框架技术栈、甚至当前写了一半的 Diff 代码重新复制一遍，再唠叨地向新 AI 解释一次。**
 
@@ -46,7 +46,7 @@ npx skills add https://github.com/isdou/codeck --skill codeck
 - 🧭 **显式模型触发**：只有任务里明确提到 Gemini、Claude、Kimi、Grok、Antigravity 等执行器时，才交给对应工具。
 - 🔎 **可预览路由 (`pick`)**：不确定会交给谁时，先预览，不直接执行。
 - 📊 **多模型同台竞技 (`compare`)**：输入一条任务，让 Claude 和 Gemini 针对同一上下文分别给出方案，方便对比。
-- 🔌 **Codex MCP 无缝集成**：一次性把 Codeck 注册为 Codex 的 MCP 服务，以后你在 Codex 聊天时输入 `“用 Gemini 帮我分析当前实现”`，Codex 就会在后台自动调用 Codeck，不需要手动切出命令行！
+- 🔌 **Codex MCP 无缝集成**：一次性把 Codeck 注册为 Codex 的 MCP 服务，以后你在 Codex 聊天时输入 `“用 Agy 帮我分析当前实现”`，Codex 就会在后台自动调用 Codeck，不需要手动切出命令行！
 - 🗂️ **项目级交接归档**：每次经由 Codeck 发出的请求都会保存到项目内的 SQLite 归档，默认掩码明显密钥，可搜索、回放、收藏和导出。
 - ⏳ **长任务自动续接**：MCP 宿主等待接近 60 秒时，Codeck 返回 `runId` 并让 Agy 等执行器继续后台运行，随后通过 `wait_run` 取回完整结果。
 
@@ -88,11 +88,13 @@ codeck doctor
 
 > 💡 **小贴士**：Codeck 可以帮你安装已内置支持的 CLI：
 > ```bash
-> codeck install gemini        # 安装 @google/gemini-cli
+> codeck install antigravity  # 推荐：安装 Google agy CLI
+> codeck install gemini       # 兼容旧版 Gemini CLI（企业/API key 用户）
 > codeck install kimi          # 安装 Kimi Code CLI
 > codeck install grok          # 安装 Grok Build CLI
-> codeck install antigravity   # 安装 Google agy CLI
 > ```
+
+> **Google CLI 迁移提示**：自 2026 年 6 月 18 日起，Google 不再为个人/免费账户的 Gemini CLI 请求提供服务。Codeck v0.4 将 Antigravity/Agy 作为默认 Google CLI 路径；旧的 `gemini` CLI 适配器仍保留给企业许可用户，`gemini_api` 和 `gemini_image` 仍走 Gemini API。详见 [Google 的迁移公告](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)。
 
 Codeck 会为 Agy 显式固定 `[agents.antigravity].model` 对应的 agent，并把较长的路由上下文暂存到 `.codeck/context.md`，避免 Agy 的 Auto/planner 因首轮长提示切换到受地区限制的规划端点。可用 `agy agent` 查看当前可选 agent，再按需修改 `model`。
 
@@ -111,11 +113,11 @@ codeck init
 ### 第三步：路由你的第一个任务
 先预览任务会交给哪个 Executor：
 ```bash
-codeck pick "用 Gemini 分析当前 diff 有没有明显问题"
+codeck pick "用 Agy 分析当前 diff 有没有明显问题"
 ```
 或者显式指定你要使用的工具：
 ```bash
-codeck ask gemini "分析当前仓库有什么潜在的安全风险"
+codeck ask antigravity "分析当前仓库有什么潜在的安全风险"
 codeck ask kimi "梳理这个项目的模块边界"
 codeck ask grok "Review 当前 diff 并按风险排序"
 ```
@@ -133,10 +135,10 @@ Codeck 的 CLI 命令设计得非常直观，适合日常开发、调试或在�
 | **`codeck list`** | `codeck list` | 查看当前项目下可用的 Executor 列表和它们的权限 |
 | **`codeck context`** | `codeck context` | 手动刷新并生成当前项目的上下文快照 `.codeck/context.md` |
 | **`codeck pick`** | `codeck pick "架构重构建议"` | 预览任务，查看 Codeck 的路由算法会把该任务分配给谁 |
-| **`codeck auto`** | `codeck auto "用 Gemini 看这个样式问题"` | **配置路由**：按显式模型名或本地规则选择 Executor 运行 |
-| **`codeck ask`** | `codeck ask gemini "测试这部分逻辑"` | **只读提问**：发送任务给指定 Executor，默认控制在较小上下文，防止超时卡顿 |
+| **`codeck auto`** | `codeck auto "用 Agy 看这个样式问题"` | **配置路由**：按显式模型名或本地规则选择 Executor 运行 |
+| **`codeck ask`** | `codeck ask antigravity "测试这部分逻辑"` | **只读提问**：发送任务给指定 Executor，默认控制在较小上下文，防止超时卡顿 |
 | **`codeck delegate`**| `codeck delegate codex_implementer "编写测试用例" -y` | **执行授权**：允许 Executor 回写代码或执行 Shell（配合 `-y` 自动确认危险操作） |
-| **`codeck compare`** | `codeck compare claude_architect,gemini_frontend "架构重构方案"` | **对比模式**：让多个 AI 工具针对同一上下文各做一次回答 |
+| **`codeck compare`** | `codeck compare claude_architect,gemini_frontend "架构重构方案"` | **对比模式**：让多个 AI 工具针对同一上下文各做一次回答（`gemini_frontend` 保留为兼容名称，默认由 Agy 执行） |
 | **`codeck last`** | `codeck last` | 打印上一次 Codeck 运行的 AI 完整回答 |
 | **`codeck bringback`**| `codeck bringback` | 把上一步的外部 AI 回答格式化为 Hand-off 信息，供 Codex 读回 |
 | **`codeck runs`** | `codeck runs [query]` | 查询当前项目的 Codeck 归档 |
@@ -183,7 +185,7 @@ graph TD
 
 ```toml
 [routing]
-default_executor = "gemini"
+default_executor = "antigravity"
 
 [[routing.rules]]
 name = "frontend"
@@ -198,7 +200,7 @@ keywords = ["architecture", "review", "risk", "架构", "评审", "重构"]
 
 ### 2. 认识内置的 Executor 角色
 Codeck 预设了以下 Executor 配置文件：
-- 🧑‍🎨 **`gemini_frontend`**：调用 Gemini，专注前端 UI 优化与大上下文分析。
+- 🧑‍🎨 **`gemini_frontend`**：历史兼容名称，默认通过 Antigravity/Agy 做前端 UI 优化与大上下文分析。
 - 🏗 **`claude_architect`**：调用 Claude，最适合做深度的架构分析和重构 Review。
 - 🌙 **`kimi`**：调用 Kimi Code CLI，用于仓库探索和长上下文分析。
 - 🚀 **`grok`**：调用 Grok Build CLI，默认带 `read-only` sandbox 进行 Review 和分析。
@@ -279,11 +281,11 @@ codex mcp add codeck -- node /Users/yourname/codeck/dist/index.js mcp start
 配置完成后，只要你在与 Codex 对话时**提到了已配置外部执行器的名字**，Codex 就会把任务 delegate 给 Codeck。
 
 **例如，你可以对 Codex 说：**
-> *“帮我 review 一下刚才的改动，用 Gemini 分析一下这里有没有潜在的性能瓶颈。”*
+> *“帮我 review 一下刚才的改动，用 Agy 分析一下这里有没有潜在的性能瓶颈。”*
 >
 > *“让 Kimi 和 Grok 对比一下当前架构的主要风险。”*
 
-Codex 将在后台调用 Codeck 唤起本地 Gemini CLI，并在对话流中直接呈现 Gemini 给出的专业分析，整个过程上下文丝滑衔接！
+Codex 将在后台调用 Codeck 唤起本地 Agy，并在对话流中直接呈现 Google 模型给出的专业分析，整个过程上下文丝滑衔接！
 
 ---
 

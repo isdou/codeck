@@ -34,9 +34,11 @@ const DEFAULT_EXECUTORS: Record<string, ExecutorProfile> = {
     context_include: ['README.md', 'docs/**', 'src/**', 'current_diff'],
   },
   gemini_frontend: {
-    agent: 'gemini',
+    // Keep the historical executor name so existing project configs continue
+    // to resolve, but use Antigravity as the maintained Google CLI path.
+    agent: 'antigravity',
     role: 'frontend_builder',
-    description: 'Frontend, screenshots, UI diff, and long-context design analysis.',
+    description: 'Frontend, screenshots, UI diff, and long-context design analysis through Antigravity CLI.',
     allowed_modes: ['ask', 'delegate', 'compare'],
     read_files: true,
     write_files: false,
@@ -149,7 +151,7 @@ const DEFAULT_CONFIG: Config = {
     redaction_patterns: [],
   },
   routing: {
-    default_executor: 'gemini',
+    default_executor: 'antigravity',
     rules: [
       {
         name: 'kimi',

@@ -43,7 +43,7 @@ max_inline_chars = 120000
 redaction_patterns = []
 
 [routing]
-default_executor = "gemini"
+default_executor = "antigravity"
 
 [[routing.rules]]
 name = "kimi"

@@ -1,6 +1,6 @@
 # Codeck
 
-**Codex-first context handoff for Gemini, Claude Code, Kimi Code, Grok Build, and Antigravity CLI.**
+**Codex-first context handoff for Gemini API/legacy CLI, Claude Code, Kimi Code, Grok Build, and Antigravity CLI.**
 
 When you explicitly ask Codex to use Gemini, Claude, Kimi, Grok, or Antigravity, Codeck packages the current repo state, diff, AGENTS rules, and project notes for that local AI CLI.
 No repeated project explanation. No model choice made behind the user's back.
@@ -31,7 +31,7 @@ npx skills add https://github.com/isdou/codeck --skill codeck
 As a developer using AI-assisted coding, you might:
 1. **Love the smooth experience of Codex** for your day-to-day coding workflows;
 2. But occasionally prefer **Claude Code** for complex code comprehension, architectural analysis, and reviews;
-3. Or use **Gemini CLI**, **Kimi Code**, **Grok Build**, or **Antigravity CLI** for large-context analysis, UI work, and reviews.
+3. Or use **Gemini API/enterprise CLI**, **Kimi Code**, **Grok Build**, or **Antigravity CLI** for large-context analysis, UI work, and reviews.
 
 However, switching between these CLI tools usually comes with a major pain point: **you have to copy your project context, tech stack, and current git diffs manually, and repeat your project explanation to the new AI.**
 
@@ -46,7 +46,7 @@ Think of Codeck as a **local context handoff bridge for Codex**: it only delegat
 - 🧭 **Explicit Model Triggering**: Delegates only when the task names Gemini, Claude, Kimi, Grok, Antigravity, or another configured executor.
 - 🔎 **Route Preview (`pick`)**: Preview which executor would run before handing off.
 - 📊 **Multi-Model Compare (`compare`)**: Send a single task to multiple executors (e.g., Claude and Gemini) and compare their solutions side-by-side.
-- 🔌 **Codex MCP Integration**: Add Codeck as an MCP server in Codex. You can query models directly from Codex (e.g. *"Ask Gemini to analyze this performance bottleneck"*), and Codex will run Codeck behind the scenes.
+- 🔌 **Codex MCP Integration**: Add Codeck as an MCP server in Codex. You can query models directly from Codex (e.g. *"Ask Agy to analyze this performance bottleneck"*), and Codex will run Codeck behind the scenes.
 - 🗂️ **Project-Local Run Archive**: Every request sent through Codeck is stored in a project-local SQLite archive with obvious secrets masked by default. Runs can be searched, replayed, curated, and exported.
 - ⏳ **Resumable Long Runs**: When an MCP host is approaching its one-minute request limit, Codeck returns a `runId` while Agy or another executor continues in the background. Poll `wait_run` for the terminal result.
 - 📈 **Quota & Cost Tracking**: Displays precise token usage (Prompt/Completion) and estimated USD costs at the end of each run, saving metrics to history logs.
@@ -89,11 +89,13 @@ codeck doctor
 
 > 💡 **Tip**: Codeck can install its built-in CLI integrations for you:
 > ```bash
-> codeck install gemini        # Installs @google/gemini-cli
+> codeck install antigravity  # Recommended: installs Google's agy CLI
+> codeck install gemini       # Legacy Gemini CLI path for enterprise/API-key users
 > codeck install kimi          # Installs Kimi Code CLI
 > codeck install grok          # Installs Grok Build CLI
-> codeck install antigravity   # Installs Google agy CLI
 > ```
+
+> **Google CLI migration note:** Since June 18, 2026, Google no longer serves Gemini CLI requests for individual/free accounts. Codeck v0.4 uses Antigravity/Agy as the default Google CLI path. The legacy `gemini` adapter remains available for enterprise users, while `gemini_api` and `gemini_image` continue to use the Gemini API. See [Google's migration announcement](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/).
 
 Codeck pins Agy to the agent configured by `[agents.antigravity].model` and stages long routed context in `.codeck/context.md`. This prevents Agy's Auto/planner path from switching a long first-turn prompt to a region-restricted planning endpoint. Run `agy agent` to list the currently available agent names before changing `model`.
 
@@ -112,11 +114,11 @@ This will create a `.codeck/` directory containing:
 ### Step 3: Run Your First Routed Task
 Preview which executor would run:
 ```bash
-codeck pick "Ask Gemini to review the current diff for obvious issues"
+codeck pick "Ask Agy to review the current diff for obvious issues"
 ```
 Or target a specific executor directly:
 ```bash
-codeck ask gemini "Identify any security vulnerabilities in the current changes"
+codeck ask antigravity "Identify any security vulnerabilities in the current changes"
 codeck ask kimi "Map the module boundaries in this repository"
 codeck ask grok "Review the current diff and rank the risks"
 ```
@@ -132,8 +134,8 @@ codeck ask grok "Review the current diff and rank the risks"
 | **`codeck list`** | `codeck list` | Lists all configured executor profiles and their permissions. |
 | **`codeck context`** | `codeck context` | Rebuilds and updates the local context snapshot `.codeck/context.md`. |
 | **`codeck pick`** | `codeck pick "Architecture refactoring"` | Previews which executor would be chosen for a task based on routing rules. |
-| **`codeck auto`** | `codeck auto "Ask Gemini to inspect this CSS issue"` | **Configured Routing**: Uses explicit model names or local rules to choose an executor. |
-| **`codeck ask`** | `codeck ask gemini "Write tests"` | **Read-Only**: Sends a task to a specific executor under a smaller token budget. |
+| **`codeck auto`** | `codeck auto "Ask Agy to inspect this CSS issue"` | **Configured Routing**: Uses explicit model names or local rules to choose an executor. |
+| **`codeck ask`** | `codeck ask antigravity "Write tests"` | **Read-Only**: Sends a task to a specific executor under a smaller token budget. |
 | **`codeck delegate`**| `codeck delegate codex_implementer "Fix bugs" -y` | **Implementation**: Allows executors to write files or run commands (use `-y` to auto-approve). |
 | **`codeck compare`** | `codeck compare claude_architect,gemini_frontend "Refactor scheme"` | **Comparison**: Runs the task on multiple executors and outputs side-by-side results. |
 | **`codeck last`** | `codeck last` | Displays the output from the last executed task. |
@@ -178,7 +180,7 @@ Define routing keywords under `[routing]`. If a task contains matching terms, it
 
 ```toml
 [routing]
-default_executor = "gemini"
+default_executor = "antigravity"
 
 [[routing.rules]]
 name = "frontend"
@@ -192,7 +194,7 @@ keywords = ["architecture", "review", "risk", "refactor", "design"]
 ```
 
 ### 2. Built-in Executors
-- 🧑‍🎨 **`gemini_frontend`**: Uses Gemini, optimized for frontend layouts, screenshots, and long-context analysis.
+- 🧑‍🎨 **`gemini_frontend`**: A legacy-compatible name that uses Antigravity/Agy for frontend layouts, screenshots, and long-context analysis by default.
 - 🏗 **`claude_architect`**: Uses Claude, ideal for deep architectural refactoring and code reviews.
 - 🌙 **`kimi`**: Uses Kimi Code CLI for repository exploration and long-context analysis.
 - 🚀 **`grok`**: Uses Grok Build CLI with its `read-only` sandbox for review and analysis.
@@ -271,11 +273,11 @@ codex mcp add codeck -- node /Users/yourname/codeck/dist/index.js mcp start
 
 ### 2. Conversational Context Hand-off
 Whenever you mention a configured external executor, Codex will delegate the task to Codeck:
-> *“Please review my recent changes using Gemini to identify any potential performance bottlenecks.”*
+> *“Please review my recent changes using Agy to identify any potential performance bottlenecks.”*
 >
 > *“Ask Kimi and Grok to compare the main architectural risks in the current diff.”*
 
-Codex will invoke Gemini behind the scenes and display the final feedback seamlessly inside your chat.
+Codex will invoke Agy behind the scenes and display the final feedback seamlessly inside your chat.
 
 ---
 
