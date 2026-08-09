@@ -14,8 +14,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D%2020.0.0-blue.svg)](https://nodejs.org/)
 [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.org)
+[![skills.sh](https://skills.sh/b/isdou/codeck)](https://skills.sh/isdou/codeck)
 
 ![Codeck terminal demo](./assets/demo.gif)
+
+## ⚡ 安装 Agent Skill
+
+```bash
+npx skills add https://github.com/isdou/codeck --skill codeck
+```
+
+> 这个 Skill 通过本地 Codeck CLI 执行模型协作。首次使用前还需要按下方“3 步极速上手”完成 CLI 安装与 `codeck doctor` 检查。
 
 ## 🎯 为什么需要 Codeck？
 
