@@ -14,8 +14,17 @@ No repeated project explanation. No model choice made behind the user's back.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D%2020.0.0-blue.svg)](https://nodejs.org/)
 [![MCP Ready](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.org)
+[![skills.sh](https://skills.sh/b/isdou/codeck)](https://skills.sh/isdou/codeck)
 
 ![Codeck terminal demo](./assets/demo.gif)
+
+## ⚡ Install the Agent Skill
+
+```bash
+npx skills add https://github.com/isdou/codeck --skill codeck
+```
+
+> This skill routes model collaboration through the local Codeck CLI. Before first use, complete the CLI setup and run `codeck doctor` in the 3-step quick start below.
 
 ## 🎯 Why Codeck?
 
