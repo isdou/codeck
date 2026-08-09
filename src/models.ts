@@ -4,6 +4,8 @@ export type RouteMode = 'ask' | 'subagent' | 'delegate' | 'compare';
 
 export type HandoffMode = 'raw' | 'smart';
 
+export type RunStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'timeout' | 'cancelled';
+
 export type ContextResourceType = 'text' | 'file' | 'image' | 'document' | 'diff' | 'directory';
 
 export interface AgentConfig {
@@ -53,6 +55,15 @@ export interface CompareConfig {
   allow_parallel: boolean;
 }
 
+export interface ArchiveConfig {
+  enabled: boolean;
+  redact: boolean;
+  async_threshold_ms: number;
+  progress_interval_ms: number;
+  max_inline_chars: number;
+  redaction_patterns: string[];
+}
+
 export interface RouteRule {
   name?: string;
   executor: string;
@@ -71,6 +82,7 @@ export interface Config {
   budget: BudgetConfig;
   handoff: HandoffConfig;
   compare: CompareConfig;
+  archive: ArchiveConfig;
   routing: RoutingConfig;
 }
 
@@ -101,6 +113,8 @@ export interface RouteTaskInput {
   task: string;
   files?: string[];
   handoffMode?: HandoffMode;
+  sourceConversationId?: string;
+  parentRunId?: string;
 }
 
 export interface CompareExecutorsInput {
@@ -125,6 +139,8 @@ export interface RunRecord {
   mode: RouteMode;
   executor: string;
   agent: string;
+  adapter?: string;
+  model?: string;
   task: string;
   output: string;
   error: string;
@@ -138,6 +154,25 @@ export interface RunRecord {
     exceeded: boolean;
   };
   usage?: RunUsage;
+  status?: RunStatus;
+  startedAt?: string;
+  completedAt?: string;
+  updatedAt?: string;
+  prompt?: string;
+  invocationPrompt?: string;
+  contextSnapshot?: string;
+  partialOutput?: string;
+  stderr?: string;
+  archiveVersion?: number;
+  redactions?: Array<{ field: string; count: number; kinds: string[] }>;
+  sourceConversationId?: string;
+  parentRunId?: string;
+  projectPath?: string;
+  attachedFiles?: Array<{ path: string; sha256?: string; size?: number }>;
+  curated?: boolean;
+  tags?: string[];
+  note?: string;
+  payloadRefs?: Record<string, { path: string; sha256: string; chars: number }>;
 }
 
 export interface AdapterCapabilities {

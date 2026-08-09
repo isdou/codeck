@@ -4,6 +4,20 @@ import { spawn } from 'child_process';
 import { spawnSync } from 'child_process';
 import type { AdapterCapabilities, AgentConfig, BuiltContext, ExecutorProfile, RunRecord, RunUsage } from './models.js';
 
+export interface AdapterProgress {
+  output?: string;
+  error?: string;
+  kind?: 'stdout' | 'stderr' | 'status';
+}
+
+export interface PreparedAdapterRequest {
+  prompt: string;
+  invocationPrompt: string;
+  materializedContext?: string;
+  contextPath?: string;
+  attachedFiles?: string[];
+}
+
 export interface AdapterInvokeInput {
   agentName: string;
   agent: AgentConfig;
@@ -12,6 +26,10 @@ export interface AdapterInvokeInput {
   task: string;
   context: BuiltContext;
   files?: string[];
+  cwd?: string;
+  signal?: AbortSignal;
+  onProgress?: (progress: AdapterProgress) => void;
+  prepared?: PreparedAdapterRequest;
 }
 
 export interface AdapterInvokeResult {
@@ -19,6 +37,10 @@ export interface AdapterInvokeResult {
   error: string;
   exitCode: number | null;
   usage?: RunUsage;
+  prompt?: string;
+  invocationPrompt?: string;
+  contextSnapshot?: string;
+  stderr?: string;
 }
 
 export interface AgentAdapter {
@@ -109,13 +131,71 @@ function buildPrompt(input: AdapterInvokeInput): string {
   ].join('\n');
 }
 
+function buildAntigravityPrompt(input: AdapterInvokeInput, materializedPrompt: string): PreparedAdapterRequest {
+  const cwd = input.cwd || process.cwd();
+  const contextPath = path.resolve(cwd, '.codeck', 'context.md');
+  fs.mkdirSync(path.dirname(contextPath), { recursive: true });
+  fs.writeFileSync(contextPath, materializedPrompt, { encoding: 'utf8', mode: 0o600 });
+  fs.chmodSync(contextPath, 0o600);
+
+  const invocationPrompt = [
+    'A complete routed task and its repository context are stored in this workspace file:',
+    contextPath,
+    'Read that file first, then answer the task it contains.',
+  ].join('\n');
+  return {
+    prompt: materializedPrompt,
+    invocationPrompt,
+    materializedContext: materializedPrompt,
+    contextPath,
+    attachedFiles: input.files,
+  };
+}
+
+export function prepareAdapterRequest(input: AdapterInvokeInput): PreparedAdapterRequest {
+  const adapter = (input.agent.adapter || input.executorName || '').toLowerCase();
+  if (input.prepared) {
+    // A replay can carry the historical materialized prompt while the Agy CLI
+    // still needs a context file in the current project. Re-materialize it so
+    // the invocation never points at an overwritten or foreign path.
+    if (adapter === 'antigravity' && input.prepared.materializedContext) {
+      return buildAntigravityPrompt(input, input.prepared.materializedContext);
+    }
+    return input.prepared;
+  }
+  const materializedPrompt = buildPrompt(input);
+  if (adapter === 'antigravity') return buildAntigravityPrompt(input, materializedPrompt);
+  if (adapter === 'gemini_image') {
+    return {
+      prompt: input.task,
+      invocationPrompt: input.task,
+      materializedContext: input.context.markdown,
+      attachedFiles: input.files,
+    };
+  }
+  return {
+    prompt: materializedPrompt,
+    invocationPrompt: materializedPrompt,
+    materializedContext: input.context.markdown,
+    attachedFiles: input.files,
+  };
+}
+
 function applyPromptArgs(agent: AgentConfig, defaults: string[], prompt: string): string[] {
   // An explicit empty list selects stdin mode for generic CLI integrations.
   const template = agent.prompt_args ?? defaults;
   return template.map((arg) => arg === '{prompt}' ? prompt : arg);
 }
 
-function spawnPrompt(agent: AgentConfig, promptArgs: string[], prompt: string, cwd: string, env: Record<string, string> = {}): Promise<AdapterInvokeResult> {
+function spawnPrompt(
+  agent: AgentConfig,
+  promptArgs: string[],
+  invocationPrompt: string,
+  usagePrompt: string,
+  cwd: string,
+  env: Record<string, string> = {},
+  options: { onProgress?: (progress: AdapterProgress) => void; signal?: AbortSignal } = {},
+): Promise<AdapterInvokeResult> {
   return new Promise((resolve, reject) => {
     const { binary, args } = splitCommand(agent.command);
     if (!binary) {
@@ -132,41 +212,60 @@ function spawnPrompt(agent: AgentConfig, promptArgs: string[], prompt: string, c
     let output = '';
     let error = '';
     let settled = false;
+    const abort = () => {
+      if (!settled) child.kill('SIGTERM');
+    };
+    if (options.signal?.aborted) abort();
+    options.signal?.addEventListener('abort', abort, { once: true });
     const timeout = agent.timeout_ms && agent.timeout_ms > 0
       ? setTimeout(() => {
         settled = true;
         child.kill('SIGTERM');
-        const usage = calculateUsage(prompt, output, agent.model || agent.adapter || agent.command);
+        const usage = calculateUsage(usagePrompt, output, agent.model || agent.adapter || agent.command);
         resolve({
           output,
           error: `${error}${error ? '\n' : ''}Timed out after ${agent.timeout_ms}ms.`,
           exitCode: 124,
           usage,
+          stderr: error,
         });
       }, agent.timeout_ms)
       : null;
-    child.stdout.on('data', (data) => output += data.toString());
-    child.stderr.on('data', (data) => error += data.toString());
+    child.stdout.on('data', (data) => {
+      output += data.toString();
+      options.onProgress?.({ output, error, kind: 'stdout' });
+    });
+    child.stderr.on('data', (data) => {
+      error += data.toString();
+      options.onProgress?.({ output, error, kind: 'stderr' });
+    });
     child.on('error', (err) => {
       if (timeout) clearTimeout(timeout);
+      options.signal?.removeEventListener('abort', abort);
       if (!settled) reject(new Error(`Failed to start "${binary}": ${err.message}`));
     });
     child.on('close', (code) => {
       if (timeout) clearTimeout(timeout);
+      options.signal?.removeEventListener('abort', abort);
       if (!settled) {
-        const usage = calculateUsage(prompt, output, agent.model || agent.adapter || agent.command);
-        resolve({ output, error, exitCode: code, usage });
+        const usage = calculateUsage(usagePrompt, output, agent.model || agent.adapter || agent.command);
+        resolve({ output, error, exitCode: options.signal?.aborted ? 130 : code, usage, stderr: error });
       }
     });
 
     if (promptArgs.length === 0) {
-      child.stdin.write(prompt);
+      child.stdin.write(invocationPrompt);
     }
     child.stdin.end();
   });
 }
 
-function makeCliAdapter(name: string, defaults: string[], capabilities: AdapterCapabilities, env: Record<string, string> = {}): AgentAdapter {
+function makeCliAdapter(
+  name: string,
+  defaults: string[] | ((agent: AgentConfig) => string[]),
+  capabilities: AdapterCapabilities,
+  env: Record<string, string> = {},
+): AgentAdapter {
   return {
     name,
     capabilities,
@@ -176,9 +275,23 @@ function makeCliAdapter(name: string, defaults: string[], capabilities: AdapterC
         : { ok: false, message: `${agent.command} not found in PATH` };
     },
     invoke(input) {
-      const prompt = buildPrompt(input);
-      const promptArgs = applyPromptArgs(input.agent, defaults, prompt);
-      return spawnPrompt(input.agent, promptArgs, prompt, process.cwd(), env);
+      const prepared = prepareAdapterRequest(input);
+      const defaultArgs = typeof defaults === 'function' ? defaults(input.agent) : defaults;
+      const promptArgs = applyPromptArgs(input.agent, defaultArgs, prepared.invocationPrompt);
+      return spawnPrompt(
+        input.agent,
+        promptArgs,
+        prepared.invocationPrompt,
+        prepared.prompt,
+        input.cwd || process.cwd(),
+        env,
+        { onProgress: input.onProgress, signal: input.signal },
+      ).then((result) => ({
+        ...result,
+        prompt: prepared.prompt,
+        invocationPrompt: prepared.invocationPrompt,
+        contextSnapshot: prepared.materializedContext,
+      }));
     },
   };
 }
@@ -196,13 +309,17 @@ export const mockAdapter: AgentAdapter = {
       `Task: ${input.task}`,
       `Context chars: ${input.context.summary.chars}`,
     ].join('\n');
-    const prompt = buildPrompt(input);
-    const usage = calculateUsage(prompt, output, 'mock');
+    const prepared = prepareAdapterRequest(input);
+    const usage = calculateUsage(prepared.prompt, output, 'mock');
+    input.onProgress?.({ output, kind: 'stdout' });
     return {
       output,
       error: '',
       exitCode: 0,
       usage,
+      prompt: prepared.prompt,
+      invocationPrompt: prepared.invocationPrompt,
+      contextSnapshot: prepared.materializedContext,
     };
   },
 };
@@ -221,14 +338,16 @@ export const geminiApiAdapter: AgentAdapter = {
     if (!key) {
       return { output: '', error: 'Gemini API Key is missing. Please set GEMINI_API_KEY.', exitCode: 1 };
     }
+    const prepared = prepareAdapterRequest(input);
     const model = input.agent.model || 'gemini-2.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-    const prompt = buildPrompt(input);
+    const prompt = prepared.prompt;
 
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: input.signal,
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
         }),
@@ -248,7 +367,16 @@ export const geminiApiAdapter: AgentAdapter = {
       const exactPrompt = usageMetadata?.promptTokenCount;
       const exactCompletion = usageMetadata?.candidatesTokenCount;
       const usage = calculateUsage(prompt, text, model, exactPrompt, exactCompletion);
-      return { output: text, error: '', exitCode: 0, usage };
+      input.onProgress?.({ output: text, kind: 'stdout' });
+      return {
+        output: text,
+        error: '',
+        exitCode: 0,
+        usage,
+        prompt: prepared.prompt,
+        invocationPrompt: prepared.invocationPrompt,
+        contextSnapshot: prepared.materializedContext,
+      };
     } catch (err: any) {
       return { output: '', error: `Gemini API execution error: ${err.message}`, exitCode: 1 };
     }
@@ -291,9 +419,9 @@ function mimeForImageFile(filePath: string): string | null {
   return null;
 }
 
-function geminiImageInputParts(files: string[] | undefined): any[] {
+function geminiImageInputParts(files: string[] | undefined, cwd: string = process.cwd()): any[] {
   return (files || []).flatMap((file) => {
-    const fullPath = path.resolve(process.cwd(), file);
+    const fullPath = path.resolve(cwd, file);
     const mimeType = mimeForImageFile(fullPath);
     if (!mimeType) return [];
     return [{
@@ -320,10 +448,11 @@ export const geminiImageAdapter: AgentAdapter = {
       return { output: '', error: 'Gemini API Key is missing. Please set GEMINI_API_KEY.', exitCode: 1 };
     }
 
+    const prepared = prepareAdapterRequest(input);
     const model = input.agent.model || 'gemini-3.1-flash-image';
     const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent`;
-    const prompt = input.task;
-    const inputParts = geminiImageInputParts(input.files);
+    const prompt = prepared.prompt;
+    const inputParts = geminiImageInputParts(input.files, input.cwd || process.cwd());
 
     try {
       const response = await fetch(url, {
@@ -332,6 +461,7 @@ export const geminiImageAdapter: AgentAdapter = {
           'Content-Type': 'application/json',
           'x-goog-api-key': key,
         },
+        signal: input.signal,
         body: JSON.stringify({
           contents: [{ parts: [...inputParts, { text: prompt }] }],
           generationConfig: { responseModalities: ['Image'] },
@@ -350,7 +480,7 @@ export const geminiImageAdapter: AgentAdapter = {
         return { output: text, error: `Gemini image API returned no inline image data.${text ? ` Text response: ${text}` : ''}`, exitCode: 1 };
       }
 
-      const outputDir = path.join(process.cwd(), '.codeck', 'images');
+      const outputDir = path.join(input.cwd || process.cwd(), '.codeck', 'images');
       fs.mkdirSync(outputDir, { recursive: true });
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       const paths = images.map((image, index) => {
@@ -364,7 +494,16 @@ export const geminiImageAdapter: AgentAdapter = {
       ].join('\n');
       const usageMetadata = data.usageMetadata;
       const usage = calculateUsage(prompt, output, model, usageMetadata?.promptTokenCount, usageMetadata?.candidatesTokenCount);
-      return { output, error: '', exitCode: 0, usage };
+      input.onProgress?.({ output, kind: 'stdout' });
+      return {
+        output,
+        error: '',
+        exitCode: 0,
+        usage,
+        prompt: prepared.prompt,
+        invocationPrompt: prepared.invocationPrompt,
+        contextSnapshot: prepared.materializedContext,
+      };
     } catch (err: any) {
       return { output: '', error: `Gemini image API execution error: ${err.message}`, exitCode: 1 };
     }
@@ -385,9 +524,10 @@ export const claudeApiAdapter: AgentAdapter = {
     if (!key) {
       return { output: '', error: 'Anthropic API Key is missing. Please set ANTHROPIC_API_KEY.', exitCode: 1 };
     }
+    const prepared = prepareAdapterRequest(input);
     const model = input.agent.model || 'claude-3-5-sonnet-latest';
     const url = 'https://api.anthropic.com/v1/messages';
-    const prompt = buildPrompt(input);
+    const prompt = prepared.prompt;
 
     try {
       const response = await fetch(url, {
@@ -397,6 +537,7 @@ export const claudeApiAdapter: AgentAdapter = {
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
         },
+        signal: input.signal,
         body: JSON.stringify({
           model,
           max_tokens: 4096,
@@ -418,7 +559,16 @@ export const claudeApiAdapter: AgentAdapter = {
       const exactPrompt = usageMetadata?.input_tokens;
       const exactCompletion = usageMetadata?.output_tokens;
       const usage = calculateUsage(prompt, text, model, exactPrompt, exactCompletion);
-      return { output: text, error: '', exitCode: 0, usage };
+      input.onProgress?.({ output: text, kind: 'stdout' });
+      return {
+        output: text,
+        error: '',
+        exitCode: 0,
+        usage,
+        prompt: prepared.prompt,
+        invocationPrompt: prepared.invocationPrompt,
+        contextSnapshot: prepared.materializedContext,
+      };
     } catch (err: any) {
       return { output: '', error: `Anthropic API execution error: ${err.message}`, exitCode: 1 };
     }
@@ -446,7 +596,19 @@ export function getAdapter(name: string | undefined): AgentAdapter {
     case 'grok':
       return makeCliAdapter('grok', ['--no-auto-update', '--permission-mode', 'dontAsk', '--sandbox', 'read-only', '--output-format', 'plain', '-p', '{prompt}'], { text: true, file: true, image: true, document: true, writeFiles: false, runShell: false });
     case 'antigravity':
-      return makeCliAdapter('antigravity', ['--dangerously-skip-permissions', '--print-timeout', '120s', '--print', '{prompt}'], { text: true, file: true, image: false, document: true, writeFiles: false, runShell: false });
+      return makeCliAdapter(
+        'antigravity',
+        (agent) => [
+          ...(agent.model ? ['--agent', agent.model] : []),
+          '--dangerously-skip-permissions',
+          '--print-timeout',
+          `${Math.max(1, Math.ceil((agent.timeout_ms || 180000) / 1000))}s`,
+          '--print',
+          '{prompt}',
+        ],
+        { text: true, file: true, image: false, document: true, writeFiles: false, runShell: false },
+        {},
+      );
     case 'codex':
       return makeCliAdapter('codex', ['exec', '{prompt}'], { text: true, file: true, image: false, document: true, writeFiles: true, runShell: true });
     default:
@@ -471,6 +633,8 @@ export function formatRunMarkdown(run: RunRecord): string {
     `- Mode: \`${run.mode}\``,
     `- Executor: \`${run.executor}\``,
     `- Agent: \`${run.agent}\``,
+    ...(run.adapter ? [`- Adapter: \`${run.adapter}\``] : []),
+    ...(run.model ? [`- Model: \`${run.model}\``] : []),
     `- Exit Code: ${run.exitCode}`,
     `- Context Chars: ${run.contextSummary.chars}`,
     ...usageLines,

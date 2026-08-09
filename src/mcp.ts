@@ -6,7 +6,24 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { runDoctor } from "./config.js";
 import { buildContext, formatContextToMarkdown } from "./context.js";
-import { compareExecutors, createHandoff, CodeckError, getRun, listExecutors, pickExecutor, routeTask } from "./router.js";
+import {
+  cancelRouteTask,
+  compareExecutors,
+  createHandoff,
+  CodeckError,
+  curateRun,
+  deleteRun,
+  exportRuns,
+  getRun,
+  importRuns,
+  listExecutors,
+  listRuns,
+  pickExecutor,
+  publicRun,
+  replayRun,
+  routeTask,
+  waitForRun,
+} from "./router.js";
 import { VERSION } from "./version.js";
 
 function text(text: string) {
@@ -38,6 +55,8 @@ export async function startMcpServer() {
             executor: { type: "string", description: "Executor profile name, or auto." },
             task: { type: "string", description: "Explicit current task. Required." },
             files: { type: "array", items: { type: "string" }, description: "Optional files to include." },
+            sourceConversationId: { type: "string", description: "Optional host conversation/task identifier for archive correlation." },
+            parentRunId: { type: "string", description: "Optional parent run identifier." },
             fullContext: { type: "boolean", description: "Use full context budget instead of the smaller ask budget." },
             handoffMode: { type: "string", enum: ["raw", "smart"], description: "Optional handoff mode." },
           },
@@ -58,7 +77,7 @@ export async function startMcpServer() {
       },
       {
         name: "compare_executors",
-        description: "Run the same task through multiple executor profiles sequentially and return a comparison payload.",
+        description: "Run the same task through multiple executor profiles and return a comparison payload; long children can be polled by run ID.",
         inputSchema: {
           type: "object",
           properties: {
@@ -96,7 +115,86 @@ export async function startMcpServer() {
         description: "Retrieve a previous Codeck run by id, or the latest run if omitted.",
         inputSchema: {
           type: "object",
-          properties: { runId: { type: "string" } },
+          properties: {
+            runId: { type: "string" },
+            includeContent: { type: "boolean", description: "Include the redacted prompt/context snapshot and stderr." },
+          },
+        },
+      },
+      {
+        name: "wait_run",
+        description: "Wait briefly for a pending Codeck run, then return its current or terminal state.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            runId: { type: "string" },
+            timeoutMs: { type: "number", description: "Maximum wait in milliseconds; capped below the host MCP timeout." },
+          },
+          required: ["runId"],
+        },
+      },
+      {
+        name: "cancel_run",
+        description: "Cancel an active Codeck executor run.",
+        inputSchema: { type: "object", properties: { runId: { type: "string" } }, required: ["runId"] },
+      },
+      {
+        name: "list_runs",
+        description: "List archived Codeck runs with optional status, executor, and curation filters.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            executor: { type: "string" },
+            curated: { type: "boolean" },
+            limit: { type: "number" },
+          },
+        },
+      },
+      {
+        name: "search_runs",
+        description: "Search the project-local Codeck archive by task, prompt, context, or output.",
+        inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } }, required: ["query"] },
+      },
+      {
+        name: "curate_run",
+        description: "Mark an archived run as reusable knowledge and attach tags or a note.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            runId: { type: "string" },
+            tags: { type: "array", items: { type: "string" } },
+            note: { type: "string" },
+          },
+          required: ["runId"],
+        },
+      },
+      {
+        name: "delete_run",
+        description: "Permanently delete one archived Codeck run after explicit user confirmation.",
+        inputSchema: {
+          type: "object",
+          properties: { runId: { type: "string" }, confirm: { type: "boolean", description: "Must be true to permanently delete the run." } },
+          required: ["runId", "confirm"],
+        },
+      },
+      {
+        name: "export_archive",
+        description: "Export the project-local Codeck archive as redacted JSON or Markdown.",
+        inputSchema: { type: "object", properties: { format: { type: "string", enum: ["json", "markdown"] }, limit: { type: "number" } } },
+      },
+      {
+        name: "import_runs",
+        description: "Import existing legacy .codeck/runs JSON records into the archive once.",
+        inputSchema: { type: "object", properties: {} },
+      },
+      {
+        name: "replay_run",
+        description: "Replay an archived run using its redacted historical snapshot, or explicitly use current project context.",
+        inputSchema: {
+          type: "object",
+          properties: { runId: { type: "string" }, currentContext: { type: "boolean" } },
+          required: ["runId"],
         },
       },
       {
@@ -142,15 +240,33 @@ export async function startMcpServer() {
     ],
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const { name, arguments: args = {} } = request.params;
 
     try {
       switch (name) {
         case "route_task": {
           const { fullContext, ...input } = args as any;
-          const run = await routeTask(input, { caller: 'mcp', allowOverBudget: Boolean(fullContext) });
-          return text(JSON.stringify(run, null, 2));
+          const progressToken = (request.params as any)._meta?.progressToken;
+          const progressStarted = Date.now();
+          const progressTimer = progressToken === undefined ? null : setInterval(() => {
+            void extra.sendNotification({
+              method: 'notifications/progress',
+              params: {
+                progressToken,
+                progress: Math.round((Date.now() - progressStarted) / 1000),
+                total: 45,
+                message: 'Codeck is waiting for the external executor; use wait_run if this call returns pending.',
+              },
+            } as any).catch(() => undefined);
+          }, 10000);
+          let run;
+          try {
+            run = await routeTask(input, { caller: 'mcp', allowOverBudget: Boolean(fullContext) });
+          } finally {
+            if (progressTimer) clearInterval(progressTimer);
+          }
+          return text(JSON.stringify(publicRun(run), null, 2));
         }
         case "pick_executor": {
           const { task, mode = 'ask' } = args as { task: string; mode?: any };
@@ -158,7 +274,11 @@ export async function startMcpServer() {
         }
         case "compare_executors": {
           const result = await compareExecutors(args as any, { caller: 'mcp' });
-          return text(result.output);
+          return text(JSON.stringify({
+            run: publicRun(result.run),
+            runs: result.runs.map(publicRun),
+            output: result.output,
+          }, null, 2));
         }
         case "build_context": {
           const ctx = buildContext(process.cwd(), args as any);
@@ -169,7 +289,59 @@ export async function startMcpServer() {
         }
         case "get_run": {
           const run = getRun((args as any).runId);
-          return text(run ? JSON.stringify(run, null, 2) : 'No Codeck run found.');
+          if (!run) return text('No Codeck run found.');
+          return text(JSON.stringify((args as any).includeContent ? run : publicRun(run), null, 2));
+        }
+        case "wait_run": {
+          const runId = String((args as any).runId || '');
+          const requestedTimeout = Number((args as any).timeoutMs);
+          const timeoutMs = Number.isFinite(requestedTimeout) ? Math.min(Math.max(requestedTimeout, 0), 45000) : 40000;
+          const run = await waitForRun(runId, process.cwd(), timeoutMs);
+          return text(run ? JSON.stringify(publicRun(run), null, 2) : 'No Codeck run found.');
+        }
+        case "cancel_run": {
+          const run = cancelRouteTask(String((args as any).runId || ''), process.cwd());
+          return text(run ? JSON.stringify(publicRun(run), null, 2) : 'No active Codeck run found.');
+        }
+        case "list_runs": {
+          const filter = args as any;
+          return text(JSON.stringify(listRuns({
+            status: filter.status,
+            executor: filter.executor,
+            curated: filter.curated,
+            limit: filter.limit,
+          }).map(publicRun), null, 2));
+        }
+        case "search_runs": {
+          const filter = args as any;
+          return text(JSON.stringify(listRuns({ query: filter.query, limit: filter.limit }).map(publicRun), null, 2));
+        }
+        case "curate_run": {
+          const value = args as any;
+          const run = curateRun(String(value.runId || ''), { tags: value.tags, note: value.note });
+          return text(run ? JSON.stringify(publicRun(run), null, 2) : 'No archived Codeck run found.');
+        }
+        case "delete_run": {
+          if ((args as any).confirm !== true) {
+            throw new CodeckError('confirmation_required', 'Set confirm=true after verifying the run id before deleting it.');
+          }
+          const deleted = deleteRun(String((args as any).runId || ''));
+          return text(deleted ? 'Archived Codeck run deleted.' : 'No archived Codeck run found.');
+        }
+        case "export_archive": {
+          const value = args as any;
+          return text(exportRuns(value.format === 'markdown' ? 'markdown' : 'json', { limit: value.limit }));
+        }
+        case "import_runs": {
+          return text(JSON.stringify({ imported: importRuns() }, null, 2));
+        }
+        case "replay_run": {
+          const value = args as any;
+          const run = await replayRun(String(value.runId || ''), {
+            caller: 'mcp',
+            currentContext: Boolean(value.currentContext),
+          });
+          return text(JSON.stringify(publicRun(run), null, 2));
         }
         case "list_executors": {
           return text(listExecutors());
@@ -180,7 +352,7 @@ export async function startMcpServer() {
         case "ask_agent": {
           const { agent, prompt } = args as { agent: string; prompt: string };
           const run = await routeTask({ mode: 'ask', executor: agent, task: prompt }, { caller: 'mcp' });
-          return text(run.output);
+          return text(run.status === 'succeeded' ? run.output : JSON.stringify(publicRun(run), null, 2));
         }
         case "compare_agents": {
           const { agents, prompt } = args as { agents: string[]; prompt: string };

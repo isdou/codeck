@@ -38,11 +38,31 @@ Think of Codeck as a **local context handoff bridge for Codex**: it only delegat
 - 🔎 **Route Preview (`pick`)**: Preview which executor would run before handing off.
 - 📊 **Multi-Model Compare (`compare`)**: Send a single task to multiple executors (e.g., Claude and Gemini) and compare their solutions side-by-side.
 - 🔌 **Codex MCP Integration**: Add Codeck as an MCP server in Codex. You can query models directly from Codex (e.g. *"Ask Gemini to analyze this performance bottleneck"*), and Codex will run Codeck behind the scenes.
+- 🗂️ **Project-Local Run Archive**: Every request sent through Codeck is stored in a project-local SQLite archive with obvious secrets masked by default. Runs can be searched, replayed, curated, and exported.
+- ⏳ **Resumable Long Runs**: When an MCP host is approaching its one-minute request limit, Codeck returns a `runId` while Agy or another executor continues in the background. Poll `wait_run` for the terminal result.
 - 📈 **Quota & Cost Tracking**: Displays precise token usage (Prompt/Completion) and estimated USD costs at the end of each run, saving metrics to history logs.
 
 ---
 
 ## 🚀 3-Step Quick Start
+
+### Install the Codex sidebar plugin (recommended)
+
+If you use a Codex build with plugin support, install Codeck from its Git marketplace:
+
+```bash
+codex plugin marketplace add isdou/codeck --ref main
+codex plugin add codeck@codeck
+```
+
+For a local development checkout, replace the marketplace source with the absolute path to the repository:
+
+```bash
+codex plugin marketplace add /absolute/path/to/codeck
+codex plugin add codeck@codeck
+```
+
+Restart Codex or open a new task after installation. Codeck should then appear in the plugin sidebar. The plugin does not bundle external models; install and authenticate the CLI you want to call on your own machine.
 
 ### Step 1: Install Codeck
 Ensure you have Node.js 20 or later installed. Clone the repository and run:
@@ -65,6 +85,10 @@ codeck doctor
 > codeck install grok          # Installs Grok Build CLI
 > codeck install antigravity   # Installs Google agy CLI
 > ```
+
+Codeck pins Agy to the agent configured by `[agents.antigravity].model` and stages long routed context in `.codeck/context.md`. This prevents Agy's Auto/planner path from switching a long first-turn prompt to a region-restricted planning endpoint. Run `agy agent` to list the currently available agent names before changing `model`.
+
+> **Data boundary:** Codeck collects and assembles Git status, diffs, project notes, and rules locally. When you explicitly name an external executor, the selected context is then sent through that executor's own CLI/service to its model provider. Review the project content and provider policy before sending. Codeck's project archive stays local by default and masks obvious secrets.
 
 ### Step 2: Initialize in Your Project Workspace
 Navigate to your project root folder and initialize Codeck:
@@ -105,6 +129,13 @@ codeck ask grok "Review the current diff and rank the risks"
 | **`codeck compare`** | `codeck compare claude_architect,gemini_frontend "Refactor scheme"` | **Comparison**: Runs the task on multiple executors and outputs side-by-side results. |
 | **`codeck last`** | `codeck last` | Displays the output from the last executed task. |
 | **`codeck bringback`**| `codeck bringback` | Formats the latest execution output as a host-ready handoff payload. |
+| **`codeck runs`** | `codeck runs [query]` | Searches the current project's Codeck archive. |
+| **`codeck run`** | `codeck run <run-id> --content` | Shows one archived run, including redacted request content. |
+| **`codeck wait`** | `codeck wait <run-id>` | Waits for a long-running executor job and returns its current state. |
+| **`codeck curate`** | `codeck curate <run-id> --tag architecture` | Marks a run as reusable project knowledge. |
+| **`codeck delete-run`** | `codeck delete-run <run-id> --yes` | Permanently deletes one archive record after confirmation. |
+| **`codeck replay`** | `codeck replay <run-id>` | Replays a run using its historical snapshot. |
+| **`codeck export`** | `codeck export -f markdown` | Exports the project archive. |
 
 ---
 

@@ -1,0 +1,38 @@
+{
+  "name": "codeck",
+  "version": "0.3.0",
+  "description": "Route explicit Codex requests to local AI executors and keep a project-local, redacted archive of every handoff.",
+  "author": {
+    "name": "isdou"
+  },
+  "homepage": "https://github.com/isdou/codeck",
+  "repository": "https://github.com/isdou/codeck",
+  "license": "MIT",
+  "keywords": [
+    "coding-agent",
+    "multi-model",
+    "mcp",
+    "archive",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Codeck \u591a\u6a21\u578b\u534f\u4f5c",
+    "shortDescription": "\u54a8\u8be2\u5916\u90e8\u6a21\u578b\u5e76\u4fdd\u5b58\u53ef\u8ffd\u6eaf\u7684\u9879\u76ee\u7ea7\u4ea4\u63a5\u8bb0\u5f55\u3002",
+    "longDescription": "\u901a\u8fc7 Codeck \u628a Codex \u7684\u660e\u786e\u8bf7\u6c42\u8def\u7531\u7ed9\u672c\u5730\u914d\u7f6e\u7684 Gemini\u3001Claude\u3001Kimi\u3001Grok \u6216 Antigravity \u6267\u884c\u5668\uff0c\u5e76\u5728\u9879\u76ee\u5185\u4fdd\u5b58\u9ed8\u8ba4\u63a9\u7801\u7684\u8bf7\u6c42\u3001\u4e0a\u4e0b\u6587\u5feb\u7167\u3001\u56de\u590d\u3001\u72b6\u6001\u548c\u53ef\u590d\u7528\u77e5\u8bc6\u6807\u8bb0\u3002\u957f\u4efb\u52a1\u4f1a\u81ea\u52a8\u8f6c\u4e3a\u540e\u53f0\u8fd0\u884c\u5e76\u53ef\u8f6e\u8be2\u53d6\u56de\u3002",
+    "developerName": "isdou",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "\u7528 Agy \u8bc4\u4f30\u8fd9\u4e2a\u65b9\u6848\u7684\u98ce\u9669",
+      "\u8ba9\u4e24\u4e2a\u5916\u90e8\u6a21\u578b\u72ec\u7acb review \u5f53\u524d diff",
+      "\u641c\u7d22\u9879\u76ee\u91cc\u53ef\u590d\u7528\u7684 Codeck \u77e5\u8bc6\u8bb0\u5f55"
+    ],
+    "brandColor": "#2563EB"
+  }
+}

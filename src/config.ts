@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import * as toml from 'smol-toml';
 import { getAdapter } from './adapters.js';
-import type { AgentConfig, Config, ExecutorProfile } from './models.js';
+import type { AgentConfig, ArchiveConfig, Config, ExecutorProfile } from './models.js';
 
 const DEFAULT_AGENTS: Record<string, AgentConfig> = {
   codex: { command: 'codex', adapter: 'codex', timeout_ms: 180000 },
@@ -10,7 +10,12 @@ const DEFAULT_AGENTS: Record<string, AgentConfig> = {
   gemini: { command: 'gemini', adapter: 'gemini', timeout_ms: 90000 },
   kimi: { command: 'kimi', adapter: 'kimi', timeout_ms: 180000 },
   grok: { command: 'grok', adapter: 'grok', timeout_ms: 180000 },
-  antigravity: { command: 'agy', adapter: 'antigravity', timeout_ms: 180000 },
+  antigravity: {
+    command: 'agy',
+    adapter: 'antigravity',
+    timeout_ms: 180000,
+    model: 'gemini-3.6-flash-high',
+  },
   mock: { command: 'mock', adapter: 'mock' },
   gemini_api: { command: 'api', adapter: 'gemini_api', timeout_ms: 90000 },
   gemini_image: { command: 'api', adapter: 'gemini_image', timeout_ms: 180000, model: 'gemini-3.1-flash-image' },
@@ -116,6 +121,9 @@ const DEFAULT_CONFIG: Config = {
       '.codeck/context.md',
       '.codeck/last.md',
       '.codeck/runs/**',
+      '.codeck/archive/**',
+      '.codeck/archive.sqlite3*',
+      '.codeck/archive.json',
     ],
   },
   budget: {
@@ -131,6 +139,14 @@ const DEFAULT_CONFIG: Config = {
   compare: {
     default_execution: 'sequential',
     allow_parallel: false,
+  },
+  archive: {
+    enabled: true,
+    redact: true,
+    async_threshold_ms: 45000,
+    progress_interval_ms: 5000,
+    max_inline_chars: 120000,
+    redaction_patterns: [],
   },
   routing: {
     default_executor: 'gemini',
@@ -227,6 +243,20 @@ function normalizeConfig(parsed: Partial<Config>): Config {
     executors[name] = mergeExecutor(name, profile, profile.agent || name);
   }
 
+  const rawArchive = { ...DEFAULT_CONFIG.archive, ...(parsed.archive || {}) } as ArchiveConfig;
+  const archive: ArchiveConfig = {
+    enabled: rawArchive.enabled !== false,
+    redact: rawArchive.redact !== false,
+    // Keep MCP's first response below the SDK's default 60-second request
+    // timeout. A later wait_run call can still wait in another 45-second slice.
+    async_threshold_ms: Math.min(45000, Math.max(1000, Number(rawArchive.async_threshold_ms) || DEFAULT_CONFIG.archive.async_threshold_ms)),
+    progress_interval_ms: Math.min(30000, Math.max(250, Number(rawArchive.progress_interval_ms) || DEFAULT_CONFIG.archive.progress_interval_ms)),
+    max_inline_chars: Math.max(1000, Number(rawArchive.max_inline_chars) || DEFAULT_CONFIG.archive.max_inline_chars),
+    redaction_patterns: Array.isArray(rawArchive.redaction_patterns)
+      ? rawArchive.redaction_patterns.filter((pattern): pattern is string => typeof pattern === 'string')
+      : [],
+  };
+
   return {
     agents,
     executors,
@@ -234,6 +264,7 @@ function normalizeConfig(parsed: Partial<Config>): Config {
     budget: { ...DEFAULT_CONFIG.budget, ...(parsed.budget || {}) },
     handoff: { ...DEFAULT_CONFIG.handoff, ...(parsed.handoff || {}) },
     compare: { ...DEFAULT_CONFIG.compare, ...(parsed.compare || {}) },
+    archive,
     routing: { ...DEFAULT_CONFIG.routing, ...(parsed.routing || {}) },
   };
 }
@@ -241,6 +272,7 @@ function normalizeConfig(parsed: Partial<Config>): Config {
 export function initCodeck(cwd: string = process.cwd()): { created: boolean; configPath: string } {
   const dir = getCodeckDir(cwd);
   fs.mkdirSync(path.join(dir, 'runs'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'archive'), { recursive: true });
 
   const configPath = getConfigPath(cwd);
   let created = false;

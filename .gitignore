@@ -1,8 +1,7 @@
 # Dependencies
 node_modules/
 
-# Build outputs
-dist/
+# Build metadata
 *.tsbuildinfo
 
 # Debug logs
@@ -39,3 +38,9 @@ Thumbs.db
 .codeck/context.md
 .codeck/last.md
 .codeck/runs/
+.codeck/archive.sqlite3
+.codeck/archive.sqlite3-*
+.codeck/archive.sqlite3-shm
+.codeck/archive.sqlite3-wal
+.codeck/archive.json
+.codeck/archive/

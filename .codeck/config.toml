@@ -21,6 +21,7 @@ timeout_ms = 180000
 [agents.antigravity]
 command = "agy"
 timeout_ms = 180000
+model = "gemini-3.6-flash-high"
 
 [context]
 include_git_diff = true
@@ -32,6 +33,14 @@ max_files = 12
 max_context_chars = 60000
 mcp_max_context_chars = 60000
 ask_context_chars = 16000
+
+[archive]
+enabled = true
+redact = true
+async_threshold_ms = 45000
+progress_interval_ms = 5000
+max_inline_chars = 120000
+redaction_patterns = []
 
 [routing]
 default_executor = "gemini"

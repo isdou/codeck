@@ -1,0 +1,26 @@
+{
+  "name": "codeck",
+  "version": "0.3.0",
+  "description": "Route explicit Codex requests to local AI executors and keep a project-local, redacted archive of every handoff.",
+  "author": {
+    "name": "isdou"
+  },
+  "license": "MIT",
+  "keywords": ["coding-agent", "multi-model", "mcp", "archive", "codex"],
+  "skills": "./skills/",
+  "mcpServers": "./mcp_config.json",
+  "interface": {
+    "displayName": "Codeck 多模型协作",
+    "shortDescription": "咨询外部模型并保存可追溯的项目级交接记录。",
+    "longDescription": "通过 Codeck 把明确的宿主请求路由给本地 AI 执行器，并保存默认掩码的项目级交接记录。",
+    "developerName": "isdou",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "defaultPrompt": [
+      "用 Agy 评估这个方案的风险",
+      "让两个外部模型独立 review 当前 diff",
+      "搜索项目里可复用的 Codeck 知识记录"
+    ],
+    "brandColor": "#2563EB"
+  }
+}

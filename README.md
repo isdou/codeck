@@ -38,10 +38,30 @@
 - 🔎 **可预览路由 (`pick`)**：不确定会交给谁时，先预览，不直接执行。
 - 📊 **多模型同台竞技 (`compare`)**：输入一条任务，让 Claude 和 Gemini 针对同一上下文分别给出方案，方便对比。
 - 🔌 **Codex MCP 无缝集成**：一次性把 Codeck 注册为 Codex 的 MCP 服务，以后你在 Codex 聊天时输入 `“用 Gemini 帮我分析当前实现”`，Codex 就会在后台自动调用 Codeck，不需要手动切出命令行！
+- 🗂️ **项目级交接归档**：每次经由 Codeck 发出的请求都会保存到项目内的 SQLite 归档，默认掩码明显密钥，可搜索、回放、收藏和导出。
+- ⏳ **长任务自动续接**：MCP 宿主等待接近 60 秒时，Codeck 返回 `runId` 并让 Agy 等执行器继续后台运行，随后通过 `wait_run` 取回完整结果。
 
 ---
 
 ## 🚀 3步极速上手
+
+### 侧边栏插件安装（推荐）
+
+如果你使用的是支持插件的 Codex，可以直接从 Codeck 的 Git marketplace 安装：
+
+```bash
+codex plugin marketplace add isdou/codeck --ref main
+codex plugin add codeck@codeck
+```
+
+开发本地副本时，也可以把 marketplace 地址替换为本地路径：
+
+```bash
+codex plugin marketplace add /绝对路径/to/codeck
+codex plugin add codeck@codeck
+```
+
+安装完成后重启 Codex 或新开任务，Codeck 会出现在插件侧边栏中。插件本身不包含外部模型；你仍需要在本机安装并登录要调用的 CLI。
 
 ### 第一步：安装 Codeck
 确保本地已安装 Node.js 20 或更高版本。克隆仓库后，在 Codeck 项目根目录执行：
@@ -64,6 +84,10 @@ codeck doctor
 > codeck install grok          # 安装 Grok Build CLI
 > codeck install antigravity   # 安装 Google agy CLI
 > ```
+
+Codeck 会为 Agy 显式固定 `[agents.antigravity].model` 对应的 agent，并把较长的路由上下文暂存到 `.codeck/context.md`，避免 Agy 的 Auto/planner 因首轮长提示切换到受地区限制的规划端点。可用 `agy agent` 查看当前可选 agent，再按需修改 `model`。
+
+> **数据边界**：Codeck 在本地收集和组装 Git 状态、diff、项目说明及规则；当你明确点名外部执行器后，选定的上下文会通过该执行器自己的 CLI/服务发送给对应模型提供方。请在发送前检查项目内容和提供方政策。Codeck 的项目归档默认保存在本地，并掩码明显密钥。
 
 ### 第二步：在你的代码项目中初始化
 切换到你需要开发的项目目录下（例如你的 Web 项目或 Python 项目），执行：
@@ -106,6 +130,13 @@ Codeck 的 CLI 命令设计得非常直观，适合日常开发、调试或在�
 | **`codeck compare`** | `codeck compare claude_architect,gemini_frontend "架构重构方案"` | **对比模式**：让多个 AI 工具针对同一上下文各做一次回答 |
 | **`codeck last`** | `codeck last` | 打印上一次 Codeck 运行的 AI 完整回答 |
 | **`codeck bringback`**| `codeck bringback` | 把上一步的外部 AI 回答格式化为 Hand-off 信息，供 Codex 读回 |
+| **`codeck runs`** | `codeck runs [query]` | 查询当前项目的 Codeck 归档 |
+| **`codeck run`** | `codeck run <run-id> --content` | 查看一次归档记录及其掩码后的请求内容 |
+| **`codeck wait`** | `codeck wait <run-id>` | 等待长任务完成并取回结果 |
+| **`codeck curate`** | `codeck curate <run-id> --tag architecture` | 把一次交接标记为可复用知识 |
+| **`codeck delete-run`** | `codeck delete-run <run-id> --yes` | 显式确认后删除一条归档 |
+| **`codeck replay`** | `codeck replay <run-id>` | 使用历史快照重新调用一次模型 |
+| **`codeck export`** | `codeck export -f markdown` | 导出项目归档 |
 
 ---
 
@@ -128,7 +159,9 @@ graph TD
 - **`ask_context_chars`** (默认 `16,000` 字符)：适用于只读式的小提问，保证速度。
 - **`max_context_chars`** (默认 `60,000` 字符)：适用于 `delegate`（具体实现）或使用 `--full-context` 参数时的完整回答。
 
-每次运行后，CLI 会打印本次上下文占用、prompt/completion token 和成本估算；同样的信息也会写入 `.codeck/runs/*.json` 与 `.codeck/runs/*.md`。API executor 会尽量使用 provider 返回的真实 token；普通 CLI executor 拿不到真实账单时会按字符数估算，并标记为 `Est.`。
+每次运行后，CLI 会打印本次上下文占用、prompt/completion token 和成本估算；运行摘要也会写入 `.codeck/runs/*.json` 与 `.codeck/runs/*.md`。API executor 会尽量使用 provider 返回的真实 token；普通 CLI executor 拿不到真实账单时会按字符数估算，并标记为 `Est.`。
+
+经由 Codeck 发出的请求、实际调用提示、上下文快照、增量输出和最终结果会进入 `.codeck/archive.sqlite3`；默认掩码明显密钥，超长内容会外置到 `.codeck/archive/payloads/`。`.codeck/runs/` 仅保留兼容旧版本的轻量记录。MCP 可使用 `wait_run`、`list_runs`、`search_runs`、`curate_run`、`replay_run` 和 `export_archive` 管理这些记录。
 
 ---
 
