@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -147,6 +148,37 @@ test('MCP stdio server completes a handshake and serves tools', async () => {
     }
   } finally {
     await client.close();
+  }
+});
+
+test('CLI can emit machine-readable run results', () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'codeck-cli-json-'));
+  try {
+    initCodeck(cwd);
+    const result = spawnSync(
+      process.execPath,
+      [path.join(projectRoot, 'dist/index.js'), 'ask', '--json', 'mock', 'return', 'structured', 'data'],
+      { cwd, encoding: 'utf8' },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    const run = JSON.parse(result.stdout);
+    assert.equal(run.executor, 'mock');
+    assert.equal(run.status, 'succeeded');
+    assert.match(run.output, /Mock executor: mock/);
+
+    const compareResult = spawnSync(
+      process.execPath,
+      [path.join(projectRoot, 'dist/index.js'), 'compare', 'mock,mock', '--json', 'compare', 'the', 'same', 'task'],
+      { cwd, encoding: 'utf8' },
+    );
+    assert.equal(compareResult.status, 0, compareResult.stderr);
+    const comparison = JSON.parse(compareResult.stdout);
+    assert.equal(comparison.run.status, 'succeeded');
+    assert.equal(comparison.runs.length, 2);
+    assert(comparison.runs.every((item) => item.executor === 'mock'));
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
 
