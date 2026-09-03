@@ -106,6 +106,26 @@ function printRunSummary(run) {
         console.log(chalk.gray(`Usage: Prompt ${run.usage.promptTokens.toLocaleString()} | Completion ${run.usage.completionTokens.toLocaleString()} tokens | Cost: $${run.usage.estimatedCostUsd.toFixed(5)} (${typeLabel})`));
     }
 }
+function printRunResult(run, json) {
+    if (json) {
+        console.log(JSON.stringify(publicRun(run), null, 2));
+        return;
+    }
+    console.log(run.output);
+    printRunSummary(run);
+}
+function printCompareResult(result, json) {
+    if (json) {
+        console.log(JSON.stringify({
+            run: publicRun(result.run),
+            runs: result.runs.map(publicRun),
+            output: result.output,
+        }, null, 2));
+        return;
+    }
+    console.log(result.output);
+    printRunSummary(result.run);
+}
 program
     .command('init')
     .description('Initialize Codeck workspace')
@@ -217,6 +237,7 @@ program
     .option('-m, --mode <mode>', 'ask, subagent, or delegate', 'ask')
     .option('-f, --file <file...>', 'Files to include')
     .option('--full-context', 'Use the full context budget for ask mode')
+    .option('--json', 'Print the run as JSON')
     .option('-y, --yes', 'Confirm writable/shell-enabled executor')
     .action(async (taskParts, options) => {
     try {
@@ -225,8 +246,7 @@ program
         const executor = pickExecutor(task, mode, process.cwd(), 'cli');
         await confirmDangerousExecutor(executor, Boolean(options.yes));
         const run = await routeTask({ mode, executor, task, files: options.file }, { caller: 'cli', allowOverBudget: Boolean(options.fullContext) });
-        console.log(run.output);
-        printRunSummary(run);
+        printRunResult(run, Boolean(options.json));
     }
     catch (err) {
         console.error(chalk.red(err.message));
@@ -241,6 +261,7 @@ program
     .argument('<task...>', 'Task text')
     .option('-f, --file <file...>', 'Files to include')
     .option('--full-context', 'Use the full context budget for ask mode')
+    .option('--json', 'Print the run as JSON')
     .option('-y, --yes', 'Confirm writable/shell-enabled executor')
     .action(async (mode, executor, taskParts, options) => {
     try {
@@ -248,8 +269,7 @@ program
         const selectedExecutor = executor === 'auto' ? pickExecutor(task, mode, process.cwd(), 'cli') : executor;
         await confirmDangerousExecutor(selectedExecutor, Boolean(options.yes));
         const run = await routeTask({ mode, executor: selectedExecutor, task, files: options.file }, { caller: 'cli', allowOverBudget: Boolean(options.fullContext) });
-        console.log(run.output);
-        printRunSummary(run);
+        printRunResult(run, Boolean(options.json));
     }
     catch (err) {
         console.error(chalk.red(err.message));
@@ -263,13 +283,13 @@ program
     .argument('<task...>', 'Task text')
     .option('-f, --file <file...>', 'Files to include')
     .option('--full-context', 'Use the full context budget')
+    .option('--json', 'Print the run as JSON')
     .action(async (executor, taskParts, options) => {
     try {
         const task = taskFrom(taskParts);
         const selectedExecutor = executor === 'auto' ? pickExecutor(task, 'ask', process.cwd(), 'cli') : executor;
         const run = await routeTask({ mode: 'ask', executor: selectedExecutor, task, files: options.file }, { caller: 'cli', allowOverBudget: Boolean(options.fullContext) });
-        console.log(run.output);
-        printRunSummary(run);
+        printRunResult(run, Boolean(options.json));
     }
     catch (err) {
         console.error(chalk.red(err.message));
@@ -282,6 +302,7 @@ program
     .argument('<executor>', 'Executor profile')
     .argument('<task...>', 'Task text')
     .option('-f, --file <file...>', 'Files to include')
+    .option('--json', 'Print the run as JSON')
     .option('-y, --yes', 'Confirm writable/shell-enabled executor')
     .action(async (executor, taskParts, options) => {
     try {
@@ -289,8 +310,7 @@ program
         const selectedExecutor = executor === 'auto' ? pickExecutor(task, 'delegate', process.cwd(), 'cli') : executor;
         await confirmDangerousExecutor(selectedExecutor, Boolean(options.yes));
         const run = await routeTask({ mode: 'delegate', executor: selectedExecutor, task, files: options.file }, { caller: 'cli' });
-        console.log(run.output);
-        printRunSummary(run);
+        printRunResult(run, Boolean(options.json));
     }
     catch (err) {
         console.error(chalk.red(err.message));
@@ -303,11 +323,11 @@ program
     .argument('<executors>', 'Comma-separated executor profiles')
     .argument('<task...>', 'Task text')
     .option('-f, --file <file...>', 'Files to include')
+    .option('--json', 'Print the run as JSON')
     .action(async (executors, taskParts, options) => {
     try {
         const result = await compareExecutors({ executors: executors.split(',').map((s) => s.trim()), task: taskFrom(taskParts), files: options.file }, { caller: 'cli' });
-        console.log(result.output);
-        printRunSummary(result.run);
+        printCompareResult(result, Boolean(options.json));
     }
     catch (err) {
         console.error(chalk.red(err.message));

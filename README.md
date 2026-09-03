@@ -1,13 +1,12 @@
 # Codeck
 
-**Codex-first context handoff for Gemini API/legacy CLI, Claude Code, Kimi Code, Grok Build, and Antigravity CLI.**
+**Codex 优先的本地上下文交接器：把一个仓库的上下文交给其他 AI 编程 CLI。**
 
-在 Codex 里明确说“用 Gemini / Claude / Kimi / Grok / Antigravity 看一下”时，Codeck 才会把当前仓库的 Git 状态、diff、AGENTS 规则和项目说明打包交给对应的本地 AI CLI。
-不用重新解释项目，也不替用户擅自选择模型。
+Codeck 会把当前仓库的 Git 状态、diff、AGENTS 规则、项目说明和相关文件组装成有边界的上下文，再交给你明确指定的 Claude Code、Gemini CLI、Kimi、Grok 或 Antigravity。结果保存在项目本地，便于搜索、回放和交接。
 
 ---
 
-[简体中文](./README.md) | [English](./README_EN.md)
+[简体中文](./README.md) | [English](./README_EN.md) | [贡献指南](./CONTRIBUTING.md)
 
 ---
 
@@ -24,19 +23,13 @@
 npx skills add https://github.com/isdou/codeck --skill codeck
 ```
 
-> 这个 Skill 通过本地 Codeck CLI 执行模型协作。首次使用前还需要按下方“3 步极速上手”完成 CLI 安装与 `codeck doctor` 检查。
+> 这个 Skill 通过本地 Codeck CLI 执行模型协作。首次使用前还需要按下方“5 分钟跑通”完成 CLI 安装与 `codeck doctor` 检查。
 
-## 🎯 为什么需要 Codeck？
+## 🎯 Codeck 解决什么问题？
 
-作为一个 AI 辅助编程的开发者，你可能：
-1. **超级喜欢 Codex** 的日常流畅体验；
-2. 但偶尔觉得 **Claude Code** 读复杂代码、梳理架构和跑 Review 时更胜一筹；
-3. 又或者在面对大项目、前端 UI、代码 Review 或长上下文任务时，想使用 **Gemini API/企业版 CLI**、**Kimi Code**、**Grok Build** 或 **Antigravity CLI**。
+切换 AI 编程 CLI 时，最浪费时间的通常不是调用模型，而是重新解释项目：技术栈、当前 diff、团队规则和已经讨论过的上下文都要再复制一遍。
 
-但每次在不同 CLI 工具之间切换，都面临一个巨大痛点：**不得不把项目背景、框架技术栈、甚至当前写了一半的 Diff 代码重新复制一遍，再唠叨地向新 AI 解释一次。**
-
-**Codeck 就是为了解决这个问题而生的。**  
-它可以被看作是 **Codex 的本地上下文交接器**：只有当你明确点名外部模型时，它才把当前项目上下文打包给你订阅的本地 AI CLI。
+Codeck 把这段交接固定成一个本地、可检查的流程：只有你明确点名外部执行器时才路由；上下文受预算和权限控制；结果默认保存在本地并掩码明显密钥。
 
 ---
 
@@ -46,81 +39,67 @@ npx skills add https://github.com/isdou/codeck --skill codeck
 - 🧭 **显式模型触发**：只有任务里明确提到 Gemini、Claude、Kimi、Grok、Antigravity 等执行器时，才交给对应工具。
 - 🔎 **可预览路由 (`pick`)**：不确定会交给谁时，先预览，不直接执行。
 - 📊 **多模型同台竞技 (`compare`)**：输入一条任务，让 Claude 和 Gemini 针对同一上下文分别给出方案，方便对比。
+- 🤖 **脚本友好输出 (`--json`)**：路由结果可以稳定输出为 JSON，方便接入脚本、CI 和其他开发工具。
 - 🔌 **Codex MCP 无缝集成**：一次性把 Codeck 注册为 Codex 的 MCP 服务，以后你在 Codex 聊天时输入 `“用 Agy 帮我分析当前实现”`，Codex 就会在后台自动调用 Codeck，不需要手动切出命令行！
 - 🗂️ **项目级交接归档**：每次经由 Codeck 发出的请求都会保存到项目内的 SQLite 归档，默认掩码明显密钥，可搜索、回放、收藏和导出。
 - ⏳ **长任务自动续接**：MCP 宿主等待接近 60 秒时，Codeck 返回 `runId` 并让 Agy 等执行器继续后台运行，随后通过 `wait_run` 取回完整结果。
 
 ---
 
-## 🚀 3步极速上手
+## 🚀 5 分钟跑通
 
-### 侧边栏插件安装（推荐）
+### 1. 安装 Codeck
 
-如果你使用的是支持插件的 Codex，可以直接从 Codeck 的 Git marketplace 安装：
+Codeck 的命令始终叫 `codeck`。npm 包使用 scoped 名称，避免和 npm 上已经存在的无关同名包冲突：
+
+```bash
+# 从 GitHub 安装（当前可用）
+npm install -g git+https://github.com/isdou/codeck.git
+
+# npm 包发布后，也可以使用官方入口
+npm install -g @isdou/codeck
+
+codeck --version
+```
+
+### 2. 初始化并完成自检
+
+在你要开发的项目根目录执行：
+
+```bash
+codeck init
+codeck doctor
+codeck ask mock "确认 Codeck 已安装"
+```
+
+内置的 `mock` 执行器不需要模型账号，可以先验证 Codeck 本身可用。`codeck init` 会创建 `.codeck/`，其中包含路由配置、项目说明和约束文件。
+
+### 3. 连接外部执行器
+
+例如使用 Google Antigravity/Agy：
+
+```bash
+codeck install antigravity
+codeck pick "用 Agy 分析当前 diff 有没有明显问题"
+codeck auto "用 Agy 分析当前 diff 有没有明显问题"
+```
+
+脚本或 CI 需要机器可读结果时，给路由命令加 `--json`：
+
+```bash
+codeck auto --json "用 Agy 分析当前 diff"
+```
+
+如果你使用支持插件的 Codex，可以从 Codeck 的 Git marketplace 安装侧边栏插件：
 
 ```bash
 codex plugin marketplace add isdou/codeck --ref main
 codex plugin add codeck@codeck
 ```
 
-开发本地副本时，也可以把 marketplace 地址替换为本地路径：
+插件不包含外部模型；你仍需要在本机安装并登录要调用的 CLI。Codeck 会为 Agy 显式固定 `[agents.antigravity].model` 对应的 agent，并把较长的路由上下文暂存到 `.codeck/context.md`。
 
-```bash
-codex plugin marketplace add /绝对路径/to/codeck
-codex plugin add codeck@codeck
-```
-
-安装完成后重启 Codex 或新开任务，Codeck 会出现在插件侧边栏中。插件本身不包含外部模型；你仍需要在本机安装并登录要调用的 CLI。
-
-### 第一步：安装 Codeck
-确保本地已安装 Node.js 20 或更高版本。克隆仓库后，在 Codeck 项目根目录执行：
-
-```bash
-npm install
-npm run build
-npm link
-```
-
-运行健康检查，确认是否安装成功，以及本地有哪些可用的 AI 命令行工具：
-```bash
-codeck doctor
-```
-
-> 💡 **小贴士**：Codeck 可以帮你安装已内置支持的 CLI：
-> ```bash
-> codeck install antigravity  # 推荐：安装 Google agy CLI
-> codeck install gemini       # 兼容旧版 Gemini CLI（企业/API key 用户）
-> codeck install kimi          # 安装 Kimi Code CLI
-> codeck install grok          # 安装 Grok Build CLI
-> ```
-
-> **Google CLI 迁移提示**：自 2026 年 6 月 18 日起，Google 不再为个人/免费账户的 Gemini CLI 请求提供服务。Codeck v0.4 将 Antigravity/Agy 作为默认 Google CLI 路径；旧的 `gemini` CLI 适配器仍保留给企业许可用户，`gemini_api` 和 `gemini_image` 仍走 Gemini API。详见 [Google 的迁移公告](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)。
-
-Codeck 会为 Agy 显式固定 `[agents.antigravity].model` 对应的 agent，并把较长的路由上下文暂存到 `.codeck/context.md`，避免 Agy 的 Auto/planner 因首轮长提示切换到受地区限制的规划端点。可用 `agy agent` 查看当前可选 agent，再按需修改 `model`。
-
-> **数据边界**：Codeck 在本地收集和组装 Git 状态、diff、项目说明及规则；当你明确点名外部执行器后，选定的上下文会通过该执行器自己的 CLI/服务发送给对应模型提供方。请在发送前检查项目内容和提供方政策。Codeck 的项目归档默认保存在本地，并掩码明显密钥。
-
-### 第二步：在你的代码项目中初始化
-切换到你需要开发的项目目录下（例如你的 Web 项目或 Python 项目），执行：
-```bash
-codeck init
-```
-这会在当前项目下创建 `.codeck/` 目录，里面包含：
-- `config.toml`：路由规则、Executor（执行器）权限、上下文预算设置。
-- `project.md`：**在此填写你的项目技术栈与架构设计**，方便 AI 快速融入。
-- `constraints.md`：**在此填写开发规范与避坑指南**，AI 绝不敢违背。
-
-### 第三步：路由你的第一个任务
-先预览任务会交给哪个 Executor：
-```bash
-codeck pick "用 Agy 分析当前 diff 有没有明显问题"
-```
-或者显式指定你要使用的工具：
-```bash
-codeck ask antigravity "分析当前仓库有什么潜在的安全风险"
-codeck ask kimi "梳理这个项目的模块边界"
-codeck ask grok "Review 当前 diff 并按风险排序"
-```
+> **数据边界**：Codeck 在本地收集和组装 Git 状态、diff、项目说明及规则；当你明确点名外部执行器后，选定的上下文会通过该执行器自己的 CLI/服务发送给对应模型提供方。请在发送前检查项目内容和提供方政策。项目归档默认保存在本地，并掩码明显密钥。
 
 ---
 
@@ -148,6 +127,8 @@ Codeck 的 CLI 命令设计得非常直观，适合日常开发、调试或在�
 | **`codeck delete-run`** | `codeck delete-run <run-id> --yes` | 显式确认后删除一条归档 |
 | **`codeck replay`** | `codeck replay <run-id>` | 使用历史快照重新调用一次模型 |
 | **`codeck export`** | `codeck export -f markdown` | 导出项目归档 |
+
+`auto`、`route`、`ask`、`delegate` 和 `compare` 都支持 `--json`，便于脚本和 CI 读取稳定的 JSON 结果。
 
 ---
 

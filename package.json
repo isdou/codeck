@@ -1,7 +1,7 @@
 {
-  "name": "codeck",
+  "name": "@isdou/codeck",
   "version": "0.4.0",
-  "description": "Codeck: Local MCP Server & CLI context handoff bridge for Codex, Claude Code, Gemini, Kimi, and Grok.",
+  "description": "Codex-first local context handoff CLI and MCP server for AI coding agents.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -37,8 +37,11 @@
     "kimi",
     "grok"
   ],
-  "author": "",
+  "author": "isdou",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/isdou/codeck.git"

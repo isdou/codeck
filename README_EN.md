@@ -1,13 +1,12 @@
 # Codeck
 
-**Codex-first context handoff for Gemini API/legacy CLI, Claude Code, Kimi Code, Grok Build, and Antigravity CLI.**
+**Codex-first local context handoff: pass one repository's context to another AI coding CLI.**
 
-When you explicitly ask Codex to use Gemini, Claude, Kimi, Grok, or Antigravity, Codeck packages the current repo state, diff, AGENTS rules, and project notes for that local AI CLI.
-No repeated project explanation. No model choice made behind the user's back.
+Codeck packages the current repository's Git state, diff, AGENTS rules, project notes, and relevant files into a bounded context, then sends it to the Claude Code, Gemini CLI, Kimi, Grok, or Antigravity executor you explicitly choose. Results stay in the project-local archive for search, replay, and handoff.
 
 ---
 
-[简体中文](./README.md) | [English](./README_EN.md)
+[简体中文](./README.md) | [English](./README_EN.md) | [Contributing](./CONTRIBUTING.md)
 
 ---
 
@@ -24,19 +23,13 @@ No repeated project explanation. No model choice made behind the user's back.
 npx skills add https://github.com/isdou/codeck --skill codeck
 ```
 
-> This skill routes model collaboration through the local Codeck CLI. Before first use, complete the CLI setup and run `codeck doctor` in the 3-step quick start below.
+> This skill routes model collaboration through the local Codeck CLI. Before first use, complete the CLI setup and run `codeck doctor` in the 5-minute quick start below.
 
-## 🎯 Why Codeck?
+## 🎯 What problem does Codeck solve?
 
-As a developer using AI-assisted coding, you might:
-1. **Love the smooth experience of Codex** for your day-to-day coding workflows;
-2. But occasionally prefer **Claude Code** for complex code comprehension, architectural analysis, and reviews;
-3. Or use **Gemini API/enterprise CLI**, **Kimi Code**, **Grok Build**, or **Antigravity CLI** for large-context analysis, UI work, and reviews.
+When switching AI coding CLIs, the costly part is often not invoking the model—it is repeating the project explanation: the stack, current diff, team rules, and context already discussed.
 
-However, switching between these CLI tools usually comes with a major pain point: **you have to copy your project context, tech stack, and current git diffs manually, and repeat your project explanation to the new AI.**
-
-**Codeck is built to solve this exact problem.**  
-Think of Codeck as a **local context handoff bridge for Codex**: it only delegates when you explicitly name the external model or executor.
+Codeck turns that handoff into a local, inspectable workflow: it routes only when you explicitly name an external executor, applies context and permission limits, and stores results locally with obvious secrets masked by default.
 
 ---
 
@@ -46,6 +39,7 @@ Think of Codeck as a **local context handoff bridge for Codex**: it only delegat
 - 🧭 **Explicit Model Triggering**: Delegates only when the task names Gemini, Claude, Kimi, Grok, Antigravity, or another configured executor.
 - 🔎 **Route Preview (`pick`)**: Preview which executor would run before handing off.
 - 📊 **Multi-Model Compare (`compare`)**: Send a single task to multiple executors (e.g., Claude and Gemini) and compare their solutions side-by-side.
+- 🤖 **Script-Friendly Output (`--json`)**: Emit stable JSON run results for scripts, CI, and other developer tools.
 - 🔌 **Codex MCP Integration**: Add Codeck as an MCP server in Codex. You can query models directly from Codex (e.g. *"Ask Agy to analyze this performance bottleneck"*), and Codex will run Codeck behind the scenes.
 - 🗂️ **Project-Local Run Archive**: Every request sent through Codeck is stored in a project-local SQLite archive with obvious secrets masked by default. Runs can be searched, replayed, curated, and exported.
 - ⏳ **Resumable Long Runs**: When an MCP host is approaching its one-minute request limit, Codeck returns a `runId` while Agy or another executor continues in the background. Poll `wait_run` for the terminal result.
@@ -53,75 +47,60 @@ Think of Codeck as a **local context handoff bridge for Codex**: it only delegat
 
 ---
 
-## 🚀 3-Step Quick Start
+## 🚀 5-Minute Quick Start
 
-### Install the Codex sidebar plugin (recommended)
+### 1. Install Codeck
 
-If you use a Codex build with plugin support, install Codeck from its Git marketplace:
+The command is always `codeck`. The npm package uses a scoped name to avoid an unrelated package already occupying the unscoped name:
+
+```bash
+# Install from GitHub (available now)
+npm install -g git+https://github.com/isdou/codeck.git
+
+# Use the official npm entry after it is published
+npm install -g @isdou/codeck
+
+codeck --version
+```
+
+### 2. Initialize and verify
+
+Run these commands from the root of the project you want to work on:
+
+```bash
+codeck init
+codeck doctor
+codeck ask mock "Verify that Codeck is installed"
+```
+
+The built-in `mock` executor needs no model account, so it verifies Codeck itself before you configure an external CLI. `codeck init` creates `.codeck/` with routing configuration, project notes, and constraints.
+
+### 3. Connect an external executor
+
+For example, install Google Antigravity/Agy and run a routed task:
+
+```bash
+codeck install antigravity
+codeck pick "Ask Agy to review the current diff for obvious issues"
+codeck auto "Ask Agy to review the current diff for obvious issues"
+```
+
+Use `--json` on routing commands when a script or CI job needs machine-readable output:
+
+```bash
+codeck auto --json "Ask Agy to review the current diff"
+```
+
+If your Codex build supports plugins, install the Codeck sidebar plugin from its Git marketplace:
 
 ```bash
 codex plugin marketplace add isdou/codeck --ref main
 codex plugin add codeck@codeck
 ```
 
-For a local development checkout, replace the marketplace source with the absolute path to the repository:
+The plugin does not bundle external models; install and authenticate the CLI you want to call on your own machine. Codeck pins Agy to `[agents.antigravity].model` and stages long routed context in `.codeck/context.md`.
 
-```bash
-codex plugin marketplace add /absolute/path/to/codeck
-codex plugin add codeck@codeck
-```
-
-Restart Codex or open a new task after installation. Codeck should then appear in the plugin sidebar. The plugin does not bundle external models; install and authenticate the CLI you want to call on your own machine.
-
-### Step 1: Install Codeck
-Ensure you have Node.js 20 or later installed. Clone the repository and run:
-
-```bash
-npm install
-npm run build
-npm link
-```
-
-Check if the installation was successful and verify which local AI CLIs are configured:
-```bash
-codeck doctor
-```
-
-> 💡 **Tip**: Codeck can install its built-in CLI integrations for you:
-> ```bash
-> codeck install antigravity  # Recommended: installs Google's agy CLI
-> codeck install gemini       # Legacy Gemini CLI path for enterprise/API-key users
-> codeck install kimi          # Installs Kimi Code CLI
-> codeck install grok          # Installs Grok Build CLI
-> ```
-
-> **Google CLI migration note:** Since June 18, 2026, Google no longer serves Gemini CLI requests for individual/free accounts. Codeck v0.4 uses Antigravity/Agy as the default Google CLI path. The legacy `gemini` adapter remains available for enterprise users, while `gemini_api` and `gemini_image` continue to use the Gemini API. See [Google's migration announcement](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/).
-
-Codeck pins Agy to the agent configured by `[agents.antigravity].model` and stages long routed context in `.codeck/context.md`. This prevents Agy's Auto/planner path from switching a long first-turn prompt to a region-restricted planning endpoint. Run `agy agent` to list the currently available agent names before changing `model`.
-
-> **Data boundary:** Codeck collects and assembles Git status, diffs, project notes, and rules locally. When you explicitly name an external executor, the selected context is then sent through that executor's own CLI/service to its model provider. Review the project content and provider policy before sending. Codeck's project archive stays local by default and masks obvious secrets.
-
-### Step 2: Initialize in Your Project Workspace
-Navigate to your project root folder and initialize Codeck:
-```bash
-codeck init
-```
-This will create a `.codeck/` directory containing:
-- `config.toml`: Routing rules, executor permissions, and token budget parameters.
-- `project.md`: **Describe your project architecture & tech stack** here so the AI understands your system.
-- `constraints.md`: **Specify your code styles & coding rules** here so the AI respects them.
-
-### Step 3: Run Your First Routed Task
-Preview which executor would run:
-```bash
-codeck pick "Ask Agy to review the current diff for obvious issues"
-```
-Or target a specific executor directly:
-```bash
-codeck ask antigravity "Identify any security vulnerabilities in the current changes"
-codeck ask kimi "Map the module boundaries in this repository"
-codeck ask grok "Review the current diff and rank the risks"
-```
+> **Data boundary:** Codeck collects and assembles Git status, diffs, project notes, and rules locally. When you explicitly name an external executor, the selected context is sent through that executor's own CLI/service to its model provider. Review the project content and provider policy before sending. The project archive stays local by default and masks obvious secrets.
 
 ---
 
@@ -147,6 +126,8 @@ codeck ask grok "Review the current diff and rank the risks"
 | **`codeck delete-run`** | `codeck delete-run <run-id> --yes` | Permanently deletes one archive record after confirmation. |
 | **`codeck replay`** | `codeck replay <run-id>` | Replays a run using its historical snapshot. |
 | **`codeck export`** | `codeck export -f markdown` | Exports the project archive. |
+
+`auto`, `route`, `ask`, `delegate`, and `compare` accept `--json` for stable machine-readable output in scripts and CI.
 
 ---
 
