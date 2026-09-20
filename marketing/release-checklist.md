@@ -6,6 +6,8 @@
 - [x] Add Codex sidebar installation instructions to Chinese and English README files.
 - [x] Generate launch copy with Agy through Codeck.
 - [x] Remove the occupied npm package name from launch instructions.
+- [ ] Publish the scoped npm package as `@isdou/codeck` after npm authentication is available.
+- [ ] Verify `npm install -g @isdou/codeck` and `codeck --version` from a clean environment.
 - [ ] Run the full build and test suite.
 - [ ] Verify plugin installation from a clean checkout.
 - [ ] Review the final diff and exclude local probes/archives.
