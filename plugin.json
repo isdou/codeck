@@ -1,27 +1,28 @@
 {
   "name": "codeck",
-  "version": "0.4.0",
-  "description": "Route explicit Codex requests to local AI executors and keep a project-local, redacted archive of every handoff.",
+  "version": "0.4.4",
+  "description": "Keep building in Codex and call a user-named external model only for the task where it is needed.",
   "author": {
     "name": "isdou"
   },
   "homepage": "https://github.com/isdou/codeck",
   "repository": "https://github.com/isdou/codeck",
   "license": "MIT",
-  "keywords": ["coding-agent", "multi-model", "mcp", "archive", "codex"],
+  "keywords": ["codex", "specialist", "agy", "antigravity", "gemini", "claude", "kimi", "mcp"],
   "skills": "./skills/",
   "mcpServers": "./mcp_config.json",
   "interface": {
-    "displayName": "Codeck 多模型协作",
-    "shortDescription": "咨询外部模型并保存可追溯的项目级交接记录。",
-    "longDescription": "通过 Codeck 把明确的宿主请求路由给本地 AI 执行器，并保存默认掩码的项目级交接记录。",
+    "displayName": "Codeck 外部模型技能",
+    "shortDescription": "留在 Codex，按需调用你点名的模型。",
+    "longDescription": "Codex 保持主持；Codeck 为用户点名的 Gemini、Claude、Kimi 等模型准备本次任务所需的背景，并把结果带回当前 Codex 工作流。",
     "developerName": "isdou",
     "category": "Productivity",
     "capabilities": ["Interactive", "Read", "Write"],
     "defaultPrompt": [
-      "用 Agy 评估这个方案的风险",
-      "让两个外部模型独立 review 当前 diff",
-      "搜索项目里可复用的 Codeck 知识记录"
+      "通过 Codeck 调用 Agy 分析当前方案，不要创建 Codex subagent",
+      "通过 Codeck 让 Gemini 根据当前产品背景写 App Store 文案",
+      "用 Claude 复核当前架构，只给建议，不要修改代码",
+      "让 Kimi 阅读这几份长文档并提炼差异"
     ],
     "brandColor": "#2563EB"
   }

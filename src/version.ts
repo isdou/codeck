@@ -13,3 +13,38 @@ if (!packageMetadata.version) {
 }
 
 export const VERSION = packageMetadata.version;
+
+const LATEST_VERSION_URL = 'https://raw.githubusercontent.com/isdou/codeck/main/plugin.json';
+const UPDATE_CHECK_TTL_MS = 6 * 60 * 60 * 1000;
+let updateCache: { expiresAt: number; notice?: string } | undefined;
+
+export function isNewerVersion(latest: string, current: string): boolean {
+  const parse = (value: string) => /^v?(\d+)\.(\d+)\.(\d+)$/.exec(value.trim())?.slice(1).map(Number);
+  const next = parse(latest);
+  const installed = parse(current);
+  if (!next || !installed) return false;
+  for (let index = 0; index < 3; index += 1) {
+    if (next[index] !== installed[index]) return next[index] > installed[index];
+  }
+  return false;
+}
+
+export async function getUpdateNotice(request: typeof fetch = fetch): Promise<string | undefined> {
+  if (process.env.CODECK_DISABLE_UPDATE_CHECK === '1') return undefined;
+  if (updateCache && updateCache.expiresAt > Date.now()) return updateCache.notice;
+
+  let notice: string | undefined;
+  try {
+    const response = await request(LATEST_VERSION_URL, { signal: AbortSignal.timeout(1500) });
+    if (response.ok) {
+      const latest = String(((await response.json()) as PackageMetadata).version || '');
+      if (isNewerVersion(latest, VERSION)) {
+        notice = `Codeck ${latest} is available (current ${VERSION}). Update the Codeck plugin and restart Codex.`;
+      }
+    }
+  } catch {
+    // Update checks are advisory and must never affect a routed task.
+  }
+  updateCache = { expiresAt: Date.now() + UPDATE_CHECK_TTL_MS, notice };
+  return notice;
+}
