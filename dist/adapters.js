@@ -50,53 +50,78 @@ function commandExists(command) {
     const probe = spawnSync(process.platform === 'win32' ? 'where' : 'which', [binary], { stdio: 'ignore' });
     return probe.status === 0;
 }
+function missingCliProbe(adapter, command) {
+    const known = {
+        antigravity: {
+            installCommand: 'codeck install antigravity',
+            setup: [
+                'Install the Agy/Antigravity CLI.',
+                'Run `agy --print "hello"` once and complete browser authentication if prompted.',
+            ],
+        },
+        gemini: {
+            installCommand: 'codeck install gemini',
+            setup: [
+                'Install the legacy Gemini CLI only for an eligible enterprise or API-key account.',
+                'Run `gemini` once and complete its authentication flow.',
+            ],
+        },
+        kimi: {
+            installCommand: 'codeck install kimi',
+            setup: ['Install Kimi Code CLI.', 'Run `kimi login` once if authentication is not configured.'],
+        },
+        grok: {
+            installCommand: 'codeck install grok',
+            setup: ['Install Grok Build CLI.', 'Run `grok login` once if authentication is not configured.'],
+        },
+        claude: {
+            setup: ['Install Claude Code so `claude` is available in PATH.', 'Run `claude` once and complete authentication.'],
+        },
+        codex: {
+            setup: ['Install the Codex CLI so `codex` is available in PATH, then sign in.'],
+        },
+    };
+    const guidance = known[adapter] || {
+        setup: [`Install or configure the command used by this executor: ${command}`],
+    };
+    return {
+        ok: false,
+        message: `${command} not found in PATH`,
+        setup: guidance.setup,
+        installCommand: guidance.installCommand,
+        requiresConsent: true,
+    };
+}
 function buildPrompt(input) {
     return [
-        `=== DEVDECK ROUTED TASK ===`,
-        `Executor: ${input.executorName}`,
-        `Role: ${input.profile.role}`,
+        `=== CODECK SPECIALIST TASK ===`,
+        `Host: Codex`,
+        `Specialist: ${input.executorName}`,
+        `Specialist role: ${input.profile.role}`,
         `Task: ${input.task}`,
         ``,
-        `=== CONTEXT ===`,
+        `=== TASK PACKAGE ===`,
         input.context.markdown,
         ``,
-        `=== INSTRUCTION ===`,
-        `Answer the routed task. Respect the executor permissions: write_files=${input.profile.write_files}, run_shell=${input.profile.run_shell}.`,
+        `=== RETURN CONTRACT ===`,
+        `Complete only the requested specialist task and return the result to Codex. Do not take over the project.`,
+        `Respect the executor permissions: write_files=${input.profile.write_files}, run_shell=${input.profile.run_shell}.`,
     ].join('\n');
-}
-function buildAntigravityPrompt(input, materializedPrompt) {
-    const cwd = input.cwd || process.cwd();
-    const contextPath = path.resolve(cwd, '.codeck', 'context.md');
-    fs.mkdirSync(path.dirname(contextPath), { recursive: true });
-    fs.writeFileSync(contextPath, materializedPrompt, { encoding: 'utf8', mode: 0o600 });
-    fs.chmodSync(contextPath, 0o600);
-    const invocationPrompt = [
-        'A complete routed task and its repository context are stored in this workspace file:',
-        contextPath,
-        'Read that file first, then answer the task it contains.',
-    ].join('\n');
-    return {
-        prompt: materializedPrompt,
-        invocationPrompt,
-        materializedContext: materializedPrompt,
-        contextPath,
-        attachedFiles: input.files,
-    };
 }
 export function prepareAdapterRequest(input) {
     const adapter = (input.agent.adapter || input.executorName || '').toLowerCase();
     if (input.prepared) {
-        // A replay can carry the historical materialized prompt while the Agy CLI
-        // still needs a context file in the current project. Re-materialize it so
-        // the invocation never points at an overwritten or foreign path.
+        // Older Agy runs may contain an invocation that points at a per-run context
+        // file. Replay the stored prompt inline so headless mode needs no file grant.
         if (adapter === 'antigravity' && input.prepared.materializedContext) {
-            return buildAntigravityPrompt(input, input.prepared.materializedContext);
+            return {
+                ...input.prepared,
+                invocationPrompt: input.prepared.prompt || input.prepared.materializedContext,
+            };
         }
         return input.prepared;
     }
     const materializedPrompt = buildPrompt(input);
-    if (adapter === 'antigravity')
-        return buildAntigravityPrompt(input, materializedPrompt);
     if (adapter === 'gemini_image') {
         return {
             prompt: input.task,
@@ -124,10 +149,29 @@ function spawnPrompt(agent, promptArgs, invocationPrompt, usagePrompt, cwd, env 
             reject(new Error('Agent command is empty.'));
             return;
         }
+        const baseEnvNames = [
+            'PATH', 'HOME', 'USER', 'SHELL', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL', 'LC_CTYPE',
+            'TERM', 'COLORTERM', 'NO_COLOR', 'FORCE_COLOR', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY',
+            'http_proxy', 'https_proxy', 'no_proxy', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_EXTRA_CA_CERTS',
+            'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME',
+            'SystemRoot', 'ComSpec', 'PATHEXT', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
+        ];
+        const credentialEnvNames = {
+            claude: ['ANTHROPIC_API_KEY'],
+            gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_LOCATION'],
+            antigravity: ['GOOGLE_API_KEY', 'GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_LOCATION'],
+            kimi: ['KIMI_API_KEY', 'MOONSHOT_API_KEY'],
+            grok: ['XAI_API_KEY'],
+        };
+        const inherited = {};
+        for (const name of [...baseEnvNames, ...(credentialEnvNames[agent.adapter || ''] || [])]) {
+            if (process.env[name] !== undefined)
+                inherited[name] = process.env[name];
+        }
         const child = spawn(binary, [...args, ...promptArgs], {
             cwd,
             shell: false,
-            env: { ...process.env, ...env, ...(agent.env || {}) },
+            env: { ...inherited, ...env, ...(agent.env || {}) },
         });
         let output = '';
         let error = '';
@@ -190,18 +234,25 @@ function makeCliAdapter(name, defaults, capabilities, env = {}) {
         probe(agent) {
             return commandExists(agent.command)
                 ? { ok: true, message: `${agent.command} found` }
-                : { ok: false, message: `${agent.command} not found in PATH` };
+                : missingCliProbe(name, agent.command);
         },
         invoke(input) {
             const prepared = prepareAdapterRequest(input);
             const defaultArgs = typeof defaults === 'function' ? defaults(input.agent) : defaults;
             const promptArgs = applyPromptArgs(input.agent, defaultArgs, prepared.invocationPrompt);
-            return spawnPrompt(input.agent, promptArgs, prepared.invocationPrompt, prepared.prompt, input.cwd || process.cwd(), env, { onProgress: input.onProgress, signal: input.signal }).then((result) => ({
-                ...result,
-                prompt: prepared.prompt,
-                invocationPrompt: prepared.invocationPrompt,
-                contextSnapshot: prepared.materializedContext,
-            }));
+            return spawnPrompt(input.agent, promptArgs, prepared.invocationPrompt, prepared.prompt, input.cwd || process.cwd(), env, { onProgress: input.onProgress, signal: input.signal }).then((result) => {
+                const emptySuccess = result.exitCode === 0 && !result.output.trim();
+                return {
+                    ...result,
+                    error: emptySuccess
+                        ? (result.error || `Executor "${input.executorName}" returned no output.`)
+                        : result.error,
+                    exitCode: emptySuccess ? 1 : result.exitCode,
+                    prompt: prepared.prompt,
+                    invocationPrompt: prepared.invocationPrompt,
+                    contextSnapshot: prepared.materializedContext,
+                };
+            });
         },
     };
 }
@@ -239,7 +290,12 @@ export const geminiApiAdapter = {
         const key = agent.api_key || process.env.GEMINI_API_KEY;
         return key
             ? { ok: true, message: 'Gemini API key is configured.' }
-            : { ok: false, message: 'Gemini API key not found. Set GEMINI_API_KEY in .env or config.toml.' };
+            : {
+                ok: false,
+                message: 'Gemini API key not found.',
+                setup: ['Set `GEMINI_API_KEY` in the project `.env` or `.codeck/.env`; never paste the key into chat.'],
+                requiresConsent: false,
+            };
     },
     async invoke(input) {
         const key = input.agent.api_key || process.env.GEMINI_API_KEY;
@@ -341,7 +397,12 @@ export const geminiImageAdapter = {
         const key = agent.api_key || process.env.GEMINI_API_KEY;
         return key
             ? { ok: true, message: 'Gemini API key is configured.' }
-            : { ok: false, message: 'Gemini API key not found. Set GEMINI_API_KEY in .env or config.toml.' };
+            : {
+                ok: false,
+                message: 'Gemini API key not found.',
+                setup: ['Set `GEMINI_API_KEY` in the project `.env` or `.codeck/.env`; never paste the key into chat.'],
+                requiresConsent: false,
+            };
     },
     async invoke(input) {
         const key = input.agent.api_key || process.env.GEMINI_API_KEY;
@@ -413,7 +474,12 @@ export const claudeApiAdapter = {
         const key = agent.api_key || process.env.ANTHROPIC_API_KEY;
         return key
             ? { ok: true, message: 'Anthropic API key is configured.' }
-            : { ok: false, message: 'Anthropic API key not found. Set ANTHROPIC_API_KEY in .env or config.toml.' };
+            : {
+                ok: false,
+                message: 'Anthropic API key not found.',
+                setup: ['Set `ANTHROPIC_API_KEY` in the project `.env` or `.codeck/.env`; never paste the key into chat.'],
+                requiresConsent: false,
+            };
     },
     async invoke(input) {
         const key = input.agent.api_key || process.env.ANTHROPIC_API_KEY;
@@ -490,8 +556,11 @@ export function getAdapter(name) {
             return makeCliAdapter('grok', ['--no-auto-update', '--permission-mode', 'dontAsk', '--sandbox', 'read-only', '--output-format', 'plain', '-p', '{prompt}'], { text: true, file: true, image: true, document: true, writeFiles: false, runShell: false });
         case 'antigravity':
             return makeCliAdapter('antigravity', (agent) => [
-                ...(agent.model ? ['--agent', agent.model] : []),
-                '--dangerously-skip-permissions',
+                ...(agent.model ? ['--model', agent.model] : []),
+                '--mode',
+                'plan',
+                '--sandbox',
+                '--disable-slash-commands',
                 '--print-timeout',
                 `${Math.max(1, Math.ceil((agent.timeout_ms || 180000) / 1000))}s`,
                 '--print',

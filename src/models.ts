@@ -111,6 +111,8 @@ export interface RouteTaskInput {
   mode: RouteMode;
   executor?: string;
   task: string;
+  brief?: string;
+  includeRepository?: boolean;
   files?: string[];
   handoffMode?: HandoffMode;
   sourceConversationId?: string;
@@ -172,6 +174,7 @@ export interface RunRecord {
   curated?: boolean;
   tags?: string[];
   note?: string;
+  updateNotice?: string;
   payloadRefs?: Record<string, { path: string; sha256: string; chars: number }>;
 }
 

@@ -1,0 +1,1741 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="用最直白的语言介绍 Codeck 的项目背景、核心问题、解决方案、工作流程与安全边界。">
+  <title>Codeck 到底是干什么的？｜零基础项目介绍</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f3eddf;
+      --paper-deep: #e9dfcc;
+      --paper-light: #fbf7ee;
+      --ink: #17251f;
+      --ink-soft: #4f5d55;
+      --line: #b9ad98;
+      --green: #275b4e;
+      --green-deep: #163b32;
+      --orange: #db4b2b;
+      --yellow: #edc84c;
+      --blue: #315e7d;
+      --danger: #9e3025;
+      --shadow: 0 18px 42px rgb(46 38 24 / 12%);
+      --font-body: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-display: "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+      --font-code: "SFMono-Regular", "Cascadia Code", "Liberation Mono", monospace;
+      --content: 72rem;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 5.5rem;
+    }
+
+    body {
+      margin: 0;
+      min-width: 20rem;
+      background:
+        radial-gradient(circle at 10% 8%, rgb(255 255 255 / 70%) 0 0.12rem, transparent 0.14rem) 0 0 / 1.35rem 1.35rem,
+        var(--paper);
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 1rem;
+      line-height: 1.75;
+      font-kerning: normal;
+      text-rendering: optimizeLegibility;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    button,
+    a,
+    summary {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :focus-visible {
+      outline: 0.2rem solid var(--orange);
+      outline-offset: 0.22rem;
+    }
+
+    ::selection {
+      background: var(--yellow);
+      color: var(--ink);
+    }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: 0.75rem;
+      left: 0.75rem;
+      padding: 0.7rem 1rem;
+      background: var(--ink);
+      color: var(--paper-light);
+      transform: translateY(-180%);
+      transition: transform 160ms cubic-bezier(0.25, 1, 0.5, 1);
+    }
+
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    .topbar {
+      position: sticky;
+      z-index: 20;
+      top: 0;
+      border-bottom: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+      background: color-mix(in srgb, var(--paper) 92%, transparent);
+      backdrop-filter: blur(12px);
+    }
+
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: var(--content);
+      min-height: 4rem;
+      margin: 0 auto;
+      padding: 0.55rem clamp(1rem, 4vw, 2rem);
+      gap: 1.25rem;
+    }
+
+    .wordmark {
+      display: inline-flex;
+      align-items: center;
+      min-height: 2.75rem;
+      gap: 0.7rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      text-decoration: none;
+    }
+
+    .wordmark-mark {
+      display: grid;
+      width: 2rem;
+      height: 2rem;
+      place-items: center;
+      border: 2px solid var(--ink);
+      background: var(--yellow);
+      font-size: 0.75rem;
+      transform: rotate(-3deg);
+    }
+
+    .topnav {
+      display: none;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.84rem;
+      font-weight: 650;
+    }
+
+    .topnav a {
+      min-height: 2.75rem;
+      padding: 0.62rem 0.72rem;
+      text-decoration: none;
+    }
+
+    .topnav a:hover {
+      color: var(--orange);
+    }
+
+    .version {
+      flex: 0 0 auto;
+      border: 1px solid var(--ink);
+      padding: 0.2rem 0.55rem;
+      font-family: var(--font-code);
+      font-size: 0.7rem;
+      line-height: 1.4;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero::after {
+      position: absolute;
+      right: -6rem;
+      bottom: -8rem;
+      width: 22rem;
+      height: 22rem;
+      border: 1px solid color-mix(in srgb, var(--orange) 50%, transparent);
+      border-radius: 50%;
+      content: "";
+      pointer-events: none;
+    }
+
+    .hero-inner {
+      display: grid;
+      max-width: var(--content);
+      margin: 0 auto;
+      padding: clamp(4.5rem, 10vw, 8.5rem) clamp(1rem, 4vw, 2rem) clamp(4rem, 8vw, 7rem);
+      gap: 4rem;
+    }
+
+    .eyebrow,
+    .section-index {
+      margin: 0 0 1rem;
+      color: var(--orange);
+      font-family: var(--font-code);
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.13em;
+      line-height: 1.4;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: 12ch;
+      margin-bottom: 1.7rem;
+      font-family: var(--font-display);
+      font-size: clamp(3.4rem, 12vw, 7.6rem);
+      font-weight: 800;
+      letter-spacing: -0.075em;
+      line-height: 0.96;
+    }
+
+    h1 .mark {
+      position: relative;
+      display: inline-block;
+      z-index: 0;
+    }
+
+    h1 .mark::after {
+      position: absolute;
+      z-index: -1;
+      right: -0.08em;
+      bottom: 0.05em;
+      left: -0.08em;
+      height: 0.22em;
+      background: var(--yellow);
+      content: "";
+      transform: rotate(-1.5deg);
+    }
+
+    .hero-lead {
+      max-width: 38rem;
+      margin-bottom: 2rem;
+      color: var(--ink-soft);
+      font-size: clamp(1.15rem, 2.2vw, 1.45rem);
+      line-height: 1.65;
+    }
+
+    .hero-lead strong {
+      color: var(--ink);
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 3rem;
+      padding: 0.72rem 1.1rem;
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: var(--paper-light);
+      font-weight: 750;
+      text-decoration: none;
+      transition: transform 140ms cubic-bezier(0.25, 1, 0.5, 1), background-color 140ms linear;
+    }
+
+    .button.secondary {
+      background: transparent;
+      color: var(--ink);
+    }
+
+    .button:hover {
+      background: var(--orange);
+      transform: translateY(-2px);
+    }
+
+    .button.secondary:hover {
+      color: var(--paper-light);
+    }
+
+    .suitcase-wrap {
+      align-self: center;
+      padding: 2.2rem 0.2rem 0;
+    }
+
+    .suitcase {
+      position: relative;
+      max-width: 30rem;
+      min-height: 24rem;
+      margin: 0 auto;
+      border: 0.18rem solid var(--ink);
+      background: var(--paper-deep);
+      box-shadow: 0.75rem 0.75rem 0 var(--green);
+      transform: rotate(1.2deg);
+    }
+
+    .suitcase::before {
+      position: absolute;
+      top: -2.4rem;
+      left: 50%;
+      width: 7rem;
+      height: 2.25rem;
+      border: 0.18rem solid var(--ink);
+      border-bottom: 0;
+      content: "";
+      transform: translateX(-50%);
+    }
+
+    .suitcase::after {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 52%;
+      width: 2.2rem;
+      border-right: 0.12rem solid var(--ink);
+      border-left: 0.12rem solid var(--ink);
+      background: color-mix(in srgb, var(--yellow) 72%, transparent);
+      content: "";
+      transform: translateX(-50%);
+    }
+
+    .case-label {
+      position: absolute;
+      z-index: 2;
+      top: 1.4rem;
+      left: 1.3rem;
+      max-width: 12rem;
+      border: 2px solid var(--ink);
+      background: var(--paper-light);
+      padding: 0.7rem 0.8rem;
+      font-family: var(--font-code);
+      font-size: 0.75rem;
+      font-weight: 800;
+      line-height: 1.45;
+      transform: rotate(-2deg);
+    }
+
+    .case-stamp {
+      position: absolute;
+      z-index: 2;
+      right: 1.3rem;
+      bottom: 1.5rem;
+      width: 6.5rem;
+      height: 6.5rem;
+      display: grid;
+      place-items: center;
+      border: 0.25rem double var(--orange);
+      border-radius: 50%;
+      color: var(--orange);
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      line-height: 1.3;
+      text-align: center;
+      transform: rotate(-12deg);
+    }
+
+    .case-tags {
+      position: absolute;
+      z-index: 3;
+      top: 7.2rem;
+      left: 1.4rem;
+      display: grid;
+      width: calc(100% - 2.8rem);
+      gap: 0.6rem;
+    }
+
+    .case-tag {
+      width: max-content;
+      max-width: 80%;
+      border: 1px solid var(--ink);
+      background: var(--paper-light);
+      padding: 0.43rem 0.72rem;
+      font-size: 0.82rem;
+      font-weight: 700;
+      box-shadow: 0.2rem 0.2rem 0 rgb(23 37 31 / 16%);
+    }
+
+    .case-tag:nth-child(even) {
+      justify-self: end;
+      transform: rotate(-1deg);
+    }
+
+    .case-tag:nth-child(3) {
+      transform: rotate(1.5deg);
+    }
+
+    .micro-note {
+      max-width: 30rem;
+      margin: 1.5rem auto 0;
+      color: var(--ink-soft);
+      font-size: 0.82rem;
+      text-align: center;
+    }
+
+    .section {
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-inner {
+      max-width: var(--content);
+      margin: 0 auto;
+      padding: clamp(4.5rem, 9vw, 8rem) clamp(1rem, 4vw, 2rem);
+    }
+
+    .section-head {
+      display: grid;
+      margin-bottom: clamp(2.5rem, 6vw, 5rem);
+      gap: 1.5rem;
+    }
+
+    .section h2 {
+      max-width: 15ch;
+      margin-bottom: 0;
+      font-family: var(--font-display);
+      font-size: clamp(2.4rem, 6.5vw, 4.8rem);
+      letter-spacing: -0.055em;
+      line-height: 1.08;
+    }
+
+    .section-intro {
+      max-width: 37rem;
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: clamp(1.06rem, 1.8vw, 1.25rem);
+    }
+
+    .plain-summary {
+      display: grid;
+      border-top: 3px solid var(--ink);
+    }
+
+    .summary-row {
+      display: grid;
+      padding: 1.7rem 0;
+      border-bottom: 1px solid var(--line);
+      gap: 0.45rem 1.5rem;
+    }
+
+    .summary-label {
+      color: var(--orange);
+      font-family: var(--font-code);
+      font-size: 0.73rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .summary-row p {
+      max-width: 52rem;
+      margin: 0;
+      font-size: clamp(1.08rem, 2vw, 1.34rem);
+      font-weight: 650;
+    }
+
+    .one-line {
+      margin-top: 2.5rem;
+      border: 2px solid var(--ink);
+      background: var(--yellow);
+      padding: clamp(1.3rem, 3vw, 2rem);
+      font-family: var(--font-display);
+      font-size: clamp(1.35rem, 3vw, 2.1rem);
+      font-weight: 800;
+      line-height: 1.45;
+      box-shadow: 0.45rem 0.45rem 0 var(--ink);
+      transform: rotate(-0.35deg);
+    }
+
+    .old-new {
+      display: grid;
+      gap: 2rem;
+    }
+
+    .route-panel {
+      position: relative;
+      border-top: 0.2rem solid var(--ink);
+      padding-top: 1.4rem;
+    }
+
+    .route-panel.new {
+      border-color: var(--orange);
+    }
+
+    .route-panel h3 {
+      margin-bottom: 1.3rem;
+      font-size: 1.12rem;
+      letter-spacing: 0.01em;
+    }
+
+    .route-list {
+      display: grid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      gap: 0;
+    }
+
+    .route-list li {
+      position: relative;
+      min-height: 4.4rem;
+      padding: 1.05rem 0 1.05rem 3.1rem;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .route-list li::before {
+      position: absolute;
+      top: 1rem;
+      left: 0;
+      display: grid;
+      width: 2rem;
+      height: 2rem;
+      place-items: center;
+      border: 1px solid var(--ink);
+      border-radius: 50%;
+      background: var(--paper-light);
+      content: counter(list-item, decimal-leading-zero);
+      font-family: var(--font-code);
+      font-size: 0.68rem;
+      font-weight: 800;
+    }
+
+    .route-panel.new .route-list li::before {
+      border-color: var(--orange);
+      background: var(--orange);
+      color: var(--paper-light);
+    }
+
+    .problem-list {
+      counter-reset: pain;
+      display: grid;
+      border-top: 1px solid var(--line);
+    }
+
+    .problem {
+      counter-increment: pain;
+      display: grid;
+      padding: 2rem 0;
+      border-bottom: 1px solid var(--line);
+      gap: 0.7rem 2rem;
+    }
+
+    .problem::before {
+      color: var(--orange);
+      content: "0" counter(pain);
+      font-family: var(--font-display);
+      font-size: 3rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .problem h3 {
+      margin-bottom: 0.35rem;
+      font-family: var(--font-display);
+      font-size: clamp(1.35rem, 2.6vw, 1.8rem);
+      line-height: 1.25;
+    }
+
+    .problem p {
+      max-width: 46rem;
+      margin-bottom: 0;
+      color: var(--ink-soft);
+    }
+
+    .analogy {
+      display: grid;
+      overflow: hidden;
+      border: 2px solid var(--ink);
+      background: var(--paper-light);
+      box-shadow: var(--shadow);
+    }
+
+    .analogy-title {
+      padding: 1.1rem 1.3rem;
+      background: var(--ink);
+      color: var(--paper-light);
+      font-family: var(--font-code);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .role {
+      display: grid;
+      grid-template-columns: 3.5rem 1fr;
+      padding: 1.4rem;
+      border-bottom: 1px solid var(--line);
+      gap: 1rem;
+    }
+
+    .role:last-child {
+      border-bottom: 0;
+    }
+
+    .role-symbol {
+      display: grid;
+      width: 3rem;
+      height: 3rem;
+      place-items: center;
+      border: 1px solid var(--ink);
+      background: var(--yellow);
+      font-family: var(--font-display);
+      font-size: 1.45rem;
+      font-weight: 800;
+    }
+
+    .role h3 {
+      margin-bottom: 0.2rem;
+      font-size: 1rem;
+    }
+
+    .role p {
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 0.92rem;
+    }
+
+    .solution-blocks {
+      display: grid;
+      gap: 0;
+      border-top: 3px solid var(--ink);
+    }
+
+    .solution {
+      display: grid;
+      padding: clamp(2rem, 4vw, 3.2rem) 0;
+      border-bottom: 1px solid var(--line);
+      gap: 1.2rem 2.4rem;
+    }
+
+    .solution-number {
+      color: var(--orange);
+      font-family: var(--font-code);
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .solution h3 {
+      margin-bottom: 0.6rem;
+      font-family: var(--font-display);
+      font-size: clamp(1.55rem, 3vw, 2.25rem);
+      line-height: 1.2;
+    }
+
+    .solution-copy p:last-child {
+      margin-bottom: 0;
+    }
+
+    .mini-tags {
+      display: flex;
+      flex-wrap: wrap;
+      align-content: start;
+      gap: 0.5rem;
+    }
+
+    .mini-tag {
+      border: 1px solid var(--line);
+      background: var(--paper-light);
+      padding: 0.4rem 0.62rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .flow {
+      position: relative;
+      display: grid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .flow::before {
+      position: absolute;
+      top: 1.55rem;
+      bottom: 1.55rem;
+      left: 1.55rem;
+      width: 2px;
+      background: var(--line);
+      content: "";
+    }
+
+    .flow-step {
+      position: relative;
+      display: grid;
+      min-height: 7rem;
+      grid-template-columns: 3.1rem 1fr;
+      padding-bottom: 1.5rem;
+      gap: 1.15rem;
+    }
+
+    .flow-number {
+      z-index: 1;
+      display: grid;
+      width: 3.1rem;
+      height: 3.1rem;
+      place-items: center;
+      border: 2px solid var(--ink);
+      border-radius: 50%;
+      background: var(--paper);
+      font-family: var(--font-code);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
+    .flow-step:nth-child(5) .flow-number {
+      border-color: var(--orange);
+      background: var(--orange);
+      color: var(--paper-light);
+    }
+
+    .flow-copy h3 {
+      margin-bottom: 0.2rem;
+      font-size: 1.05rem;
+    }
+
+    .flow-copy p {
+      max-width: 48rem;
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 0.92rem;
+    }
+
+    .boundary-note {
+      margin: 1rem 0 0 4.25rem;
+      border-left: 0.3rem solid var(--orange);
+      background: color-mix(in srgb, var(--orange) 9%, var(--paper-light));
+      padding: 1rem 1.2rem;
+      font-weight: 680;
+    }
+
+    .mode-table-wrap {
+      overflow-x: auto;
+      border-top: 3px solid var(--ink);
+    }
+
+    .scroll-hint {
+      margin: 0 0 0.7rem;
+      color: var(--ink-soft);
+      font-size: 0.8rem;
+    }
+
+    table {
+      width: 100%;
+      min-width: 44rem;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th,
+    td {
+      padding: 1rem 0.9rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--ink-soft);
+      font-family: var(--font-code);
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    td:first-child {
+      color: var(--orange);
+      font-family: var(--font-code);
+      font-size: 0.86rem;
+      font-weight: 850;
+    }
+
+    .source-map {
+      overflow: hidden;
+      border: 2px solid var(--ink);
+      background: var(--green-deep);
+      color: var(--paper-light);
+      box-shadow: var(--shadow);
+    }
+
+    .source-map-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.2rem;
+      border-bottom: 1px solid rgb(255 255 255 / 20%);
+      gap: 1rem;
+      font-family: var(--font-code);
+      font-size: 0.75rem;
+    }
+
+    .window-dots {
+      display: flex;
+      gap: 0.35rem;
+    }
+
+    .window-dots span {
+      width: 0.55rem;
+      height: 0.55rem;
+      border: 1px solid var(--paper-light);
+      border-radius: 50%;
+    }
+
+    .file-list {
+      display: grid;
+    }
+
+    .file-row {
+      display: grid;
+      padding: 1.2rem;
+      border-bottom: 1px solid rgb(255 255 255 / 15%);
+      gap: 0.35rem 1.5rem;
+    }
+
+    .file-row:last-child {
+      border-bottom: 0;
+    }
+
+    .file-name {
+      color: var(--yellow);
+      font-family: var(--font-code);
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+
+    .file-job {
+      color: color-mix(in srgb, var(--paper-light) 78%, transparent);
+      font-size: 0.9rem;
+    }
+
+    .guardrails {
+      display: grid;
+      gap: 2rem;
+    }
+
+    .guardrail {
+      border-top: 0.25rem solid var(--green);
+      padding-top: 1.25rem;
+    }
+
+    .guardrail.warning {
+      border-color: var(--orange);
+    }
+
+    .guardrail h3 {
+      margin-bottom: 0.9rem;
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+    }
+
+    .check-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .check-list li {
+      position: relative;
+      padding: 0.75rem 0 0.75rem 1.8rem;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .check-list li::before {
+      position: absolute;
+      top: 0.75rem;
+      left: 0;
+      color: var(--green);
+      content: "✓";
+      font-weight: 900;
+    }
+
+    .warning .check-list li::before {
+      color: var(--orange);
+      content: "!";
+    }
+
+    .truth-box {
+      margin-top: 2.5rem;
+      border: 2px solid var(--danger);
+      background: color-mix(in srgb, var(--orange) 8%, var(--paper-light));
+      padding: clamp(1.25rem, 3vw, 2rem);
+    }
+
+    .truth-box h3 {
+      margin-bottom: 0.65rem;
+      color: var(--danger);
+      font-size: 1rem;
+    }
+
+    .truth-box p:last-child {
+      margin-bottom: 0;
+    }
+
+    .quickstart {
+      counter-reset: setup;
+      display: grid;
+      gap: 1.2rem;
+    }
+
+    .setup-step {
+      counter-increment: setup;
+      display: grid;
+      border-top: 2px solid var(--ink);
+      padding-top: 1.2rem;
+      gap: 0.8rem;
+    }
+
+    .setup-step::before {
+      color: var(--orange);
+      content: "STEP 0" counter(setup);
+      font-family: var(--font-code);
+      font-size: 0.73rem;
+      font-weight: 850;
+      letter-spacing: 0.08em;
+    }
+
+    .setup-step h3 {
+      margin-bottom: 0.25rem;
+      font-size: 1.1rem;
+    }
+
+    .setup-step p {
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 0.92rem;
+    }
+
+    pre {
+      overflow-x: auto;
+      margin: 0;
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      padding: 1rem;
+      color: var(--paper-light);
+      font-family: var(--font-code);
+      font-size: 0.78rem;
+      line-height: 1.65;
+      tab-size: 2;
+    }
+
+    code {
+      font-family: var(--font-code);
+      font-variant-ligatures: none;
+    }
+
+    :not(pre) > code {
+      border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+      background: var(--paper-light);
+      padding: 0.12rem 0.32rem;
+      font-size: 0.86em;
+    }
+
+    .fit-grid {
+      display: grid;
+      gap: 2rem;
+    }
+
+    .fit-column {
+      border-top: 0.25rem solid var(--green);
+      padding-top: 1.25rem;
+    }
+
+    .fit-column.no {
+      border-color: var(--line);
+    }
+
+    .fit-column h3 {
+      margin-bottom: 0.8rem;
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+    }
+
+    .fit-column ul {
+      margin: 0;
+      padding-left: 1.2rem;
+    }
+
+    .fit-column li {
+      margin-bottom: 0.75rem;
+    }
+
+    .faq {
+      border-top: 3px solid var(--ink);
+    }
+
+    details {
+      border-bottom: 1px solid var(--line);
+    }
+
+    summary {
+      position: relative;
+      min-height: 4.25rem;
+      padding: 1.25rem 3rem 1.25rem 0;
+      cursor: pointer;
+      font-weight: 780;
+      list-style: none;
+    }
+
+    summary::-webkit-details-marker {
+      display: none;
+    }
+
+    summary::after {
+      position: absolute;
+      top: 50%;
+      right: 0.4rem;
+      color: var(--orange);
+      content: "+";
+      font-family: var(--font-display);
+      font-size: 1.6rem;
+      transform: translateY(-50%);
+    }
+
+    details[open] summary::after {
+      content: "−";
+    }
+
+    details p {
+      max-width: 48rem;
+      padding: 0 3rem 1.5rem 0;
+      color: var(--ink-soft);
+    }
+
+    .final-word {
+      overflow: hidden;
+      background: var(--green-deep);
+      color: var(--paper-light);
+    }
+
+    .final-word .section-inner {
+      position: relative;
+      padding-top: clamp(5rem, 10vw, 9rem);
+      padding-bottom: clamp(5rem, 10vw, 9rem);
+    }
+
+    .final-word .section-inner::after {
+      position: absolute;
+      right: -3rem;
+      bottom: -4rem;
+      color: rgb(255 255 255 / 6%);
+      content: "→";
+      font-family: var(--font-display);
+      font-size: 20rem;
+      font-weight: 900;
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    .final-word h2 {
+      position: relative;
+      z-index: 1;
+      max-width: 18ch;
+      margin-bottom: 1.5rem;
+      font-size: clamp(2.6rem, 7vw, 5.2rem);
+    }
+
+    .final-word p {
+      position: relative;
+      z-index: 1;
+      max-width: 43rem;
+      margin-bottom: 0;
+      color: color-mix(in srgb, var(--paper-light) 78%, transparent);
+      font-size: clamp(1.05rem, 2vw, 1.28rem);
+    }
+
+    .footer {
+      background: var(--ink);
+      color: var(--paper-light);
+    }
+
+    .footer-inner {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      max-width: var(--content);
+      margin: 0 auto;
+      padding: 1.4rem clamp(1rem, 4vw, 2rem) max(1.4rem, env(safe-area-inset-bottom));
+      gap: 0.8rem 2rem;
+      color: color-mix(in srgb, var(--paper-light) 70%, transparent);
+      font-size: 0.78rem;
+    }
+
+    .footer a {
+      min-height: 2.75rem;
+      display: inline-flex;
+      align-items: center;
+      color: var(--paper-light);
+      font-weight: 700;
+    }
+
+    @media (min-width: 42rem) {
+      .summary-row {
+        grid-template-columns: 7rem 1fr;
+        align-items: baseline;
+      }
+
+      .problem {
+        grid-template-columns: 5rem 1fr;
+      }
+
+      .problem::before {
+        grid-row: 1 / 3;
+      }
+
+      .solution {
+        grid-template-columns: 3.5rem minmax(0, 1fr) minmax(12rem, 0.55fr);
+      }
+
+      .file-row {
+        grid-template-columns: minmax(10rem, 0.45fr) 1fr;
+        align-items: baseline;
+      }
+
+      .quickstart,
+      .fit-grid,
+      .guardrails {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (min-width: 52rem) {
+      .topnav {
+        display: flex;
+      }
+
+      .hero-inner {
+        grid-template-columns: minmax(0, 1.2fr) minmax(20rem, 0.8fr);
+        align-items: center;
+      }
+
+      .section-head {
+        grid-template-columns: minmax(0, 1fr) minmax(19rem, 0.72fr);
+        align-items: end;
+      }
+
+      .section-intro {
+        justify-self: end;
+      }
+
+      .old-new {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .analogy {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .analogy-title {
+        grid-column: 1 / -1;
+      }
+
+      .role:nth-child(even) {
+        border-right: 1px solid var(--line);
+      }
+
+      .role:nth-last-child(-n + 2) {
+        border-bottom: 0;
+      }
+
+      .quickstart {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (hover: hover) {
+      .setup-step:hover,
+      .problem:hover {
+        background: color-mix(in srgb, var(--paper-light) 45%, transparent);
+      }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .hero-copy,
+      .suitcase-wrap {
+        animation: arrive 650ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+
+      .suitcase-wrap {
+        animation-delay: 120ms;
+      }
+
+      @keyframes arrive {
+        from {
+          opacity: 0;
+          transform: translateY(1.2rem);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    @media print {
+      .topbar,
+      .hero-actions,
+      .footer {
+        display: none;
+      }
+
+      body {
+        background: white;
+        color: black;
+      }
+
+      .section,
+      .hero {
+        break-inside: avoid;
+      }
+
+      .source-map,
+      .final-word {
+        background: white;
+        color: black;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到正文</a>
+
+  <div class="topbar">
+    <div class="topbar-inner">
+      <a class="wordmark" href="#top" aria-label="回到页面顶部">
+        <span class="wordmark-mark" aria-hidden="true">C</span>
+        <span>CODECK</span>
+      </a>
+      <nav class="topnav" aria-label="页面目录">
+        <a href="#background">背景</a>
+        <a href="#problem">问题</a>
+        <a href="#solution">方案</a>
+        <a href="#flow">流程</a>
+        <a href="#boundary">边界</a>
+        <a href="#start">上手</a>
+      </nav>
+      <span class="version">v0.4.0</span>
+    </div>
+  </div>
+
+  <header class="hero" id="top">
+    <div class="hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow">一份不说黑话的项目说明书</p>
+        <h1>Codeck 到底是<span class="mark">干什么的？</span></h1>
+        <p class="hero-lead">
+          你平时在 <strong>Codex</strong> 里写代码，偶尔想叫 Claude、Kimi、Grok 或 Agy 来看一眼。
+          <strong>Codeck 会把当前项目收拾成一只“上下文行李箱”，送给你点名的外援，再把答案带回来。</strong>
+        </p>
+        <div class="hero-actions">
+          <a class="button" href="#summary">30 秒看懂</a>
+          <a class="button secondary" href="#flow">看完整流程</a>
+        </div>
+      </div>
+
+      <div class="suitcase-wrap" aria-label="Codeck 上下文行李箱示意图">
+        <div class="suitcase">
+          <div class="case-label">TO: 你点名的外部 AI<br>FROM: 当前代码项目</div>
+          <div class="case-tags">
+            <span class="case-tag">这次要做什么</span>
+            <span class="case-tag">项目背景</span>
+            <span class="case-tag">当前 Git 改动</span>
+            <span class="case-tag">开发规则与禁区</span>
+            <span class="case-tag">相关源文件</span>
+          </div>
+          <div class="case-stamp">CODECK<br>已整理<br>可追溯</div>
+        </div>
+        <p class="micro-note">行李箱在本机整理；真正发出时，选中的内容会进入外部模型服务。</p>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="section" id="summary">
+      <div class="section-inner">
+        <div class="section-head">
+          <div>
+            <p class="section-index">00 / 先说人话</p>
+            <h2>30 秒看懂 Codeck</h2>
+          </div>
+          <p class="section-intro">先抓住一件事：Codeck 自己不会思考，也不提供模型。它负责让不同 AI 接手同一个项目时，不必从零开始。</p>
+        </div>
+
+        <div class="plain-summary">
+          <div class="summary-row">
+            <span class="summary-label">它是什么</span>
+            <p>一个运行在你电脑上的“AI 项目交接员”。</p>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label">它解决什么</span>
+            <p>换一个 AI 帮忙时，项目背景、当前改动和开发规则会断掉。</p>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label">它怎么解决</span>
+            <p>自动收集必要信息，按你的指令送给指定 AI，再把过程和答案留在项目里。</p>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label">谁最适合用</span>
+            <p>以 Codex 为主力，但偶尔需要另一个模型做审查、分析、对比或专项工作的开发者。</p>
+          </div>
+        </div>
+
+        <p class="one-line">一句话：Codeck 不是新大脑，而是让几个大脑顺利接班的交接台。</p>
+      </div>
+    </section>
+
+    <section class="section" id="background">
+      <div class="section-inner">
+        <div class="section-head">
+          <div>
+            <p class="section-index">01 / 项目背景</p>
+            <h2>为什么会需要这个项目？</h2>
+          </div>
+          <p class="section-intro">不同 AI 各有所长，但它们不会自动共享记忆。真正折磨人的，常常不是“没有好模型”，而是“每换一次模型都要重新交代一遍”。</p>
+        </div>
+
+        <div class="old-new">
+          <article class="route-panel">
+            <h3>以前：你自己当搬运工</h3>
+            <ol class="route-list">
+              <li>从 Codex 切到另一个终端。</li>
+              <li>复制项目介绍、目录和开发规范。</li>
+              <li>再复制当前改到一半的代码差异。</li>
+              <li>担心复制少了它看不懂，复制多了又慢又贵。</li>
+              <li>拿到答案后，再手工搬回 Codex。</li>
+            </ol>
+          </article>
+
+          <article class="route-panel new">
+            <h3>现在：Codeck 做交接</h3>
+            <ol class="route-list">
+              <li>你明确说：“让 Agy 看一下当前改动。”</li>
+              <li>Codeck 按规则挑出这次真正需要的项目材料。</li>
+              <li>外援收到任务、背景、规则和当前改动。</li>
+              <li>答案回到当前工作流，运行过程也有记录。</li>
+              <li>你仍然是决定找谁、采纳什么的人。</li>
+            </ol>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="problem">
+      <div class="section-inner">
+        <div class="section-head">
+          <div>
+            <p class="section-index">02 / 核心问题</p>
+            <h2>它真正要补的是“信息断层”</h2>
+          </div>
+          <p class="section-intro">模型之间没有共同记忆。一次看似简单的“换个人看看”，背后至少有四个实际问题。</p>
+        </div>
+
+        <div class="problem-list">
+          <article class="problem">
+            <div>
+              <h3>新来的 AI 不知道项目发生过什么</h3>
+              <p>它看不到你刚才的对话，也不知道项目架构、分支状态、改了哪些文件，更不知道哪些规则绝对不能碰。</p>
+            </div>
+          </article>
+          <article class="problem">
+            <div>
+              <h3>人工复制上下文又慢又容易漏</h3>
+              <p>漏一条约束，答案可能跑偏；整仓库都塞进去，又会拖慢速度、增加费用，甚至超过模型能一次读完的长度。</p>
+            </div>
+          </article>
+          <article class="problem">
+            <div>
+              <h3>“可以看”与“可以改”容易混在一起</h3>
+              <p>做代码审查通常只需要读取；真正改文件则需要更高权限。没有清楚边界，外援可能做得太多。</p>
+            </div>
+          </article>
+          <article class="problem">
+            <div>
+              <h3>答案散落在不同工具里，之后找不到</h3>
+              <p>哪个模型说过什么、当时看到的是哪版代码、为什么做这个决定，过几天往往就说不清了。</p>
+            </div>
+          </article>
+        </div>
+
+        <div class="analogy" style="margin-top: clamp(3rem, 7vw, 5.5rem);">
+          <div class="analogy-title">把它想成一个施工项目</div>
+          <div class="role">
+            <div class="role-symbol" aria-hidden="true">你</div>
+            <div><h3>你 = 甲方</h3><p>决定目标、预算，以及最后听谁的。</p></div>
+          </div>
+          <div class="role">
+            <div class="role-symbol" aria-hidden="true">C</div>
+            <div><h3>Codex = 总负责人</h3><p>一直留在主现场，负责把工作真正收口。</p></div>
+          </div>
+          <div class="role">
+            <div class="role-symbol" aria-hidden="true">AI</div>
+            <div><h3>外部模型 = 专项顾问</h3><p>有人擅长看架构，有人擅长读长代码，有人适合独立复核。</p></div>
+          </div>
+          <div class="role">
+            <div class="role-symbol" aria-hidden="true">→</div>
+            <div><h3>Codeck = 项目秘书 + 快递员</h3><p>整理资料、按你的点名送达、带回意见，并把交接单留档。</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="solution">
+      <div class="section-inner">
+        <div class="section-head">
+          <div>
+            <p class="section-index">03 / 解决方案</p>
+            <h2>Codeck 用四件事把断层补上</h2>
+          </div>
+          <p class="section-intro">它不试图替代现有 AI，而是在它们中间补一层稳定的交接流程。</p>
+        </div>
+
+        <div class="solution-blocks">
+          <article class="solution">
+            <span class="solution-number">01</span>
+            <div class="solution-copy">
+              <h3>自动整理“上下文行李箱”</h3>
+              <p>把这次任务、项目说明、开发规则、Git 状态、未提交改动和相关文件组合成一份有结构的文字材料。</p>
+            </div>
+            <div class="mini-tags" aria-label="上下文内容">
+              <span class="mini-tag">任务</span><span class="mini-tag">README</span><span class="mini-tag">Git diff</span><span class="mini-tag">AGENTS 规则</span><span class="mini-tag">相关源码</span>
+            </div>
+          </article>
+
+          <article class="solution">
+            <span class="solution-number">02</span>
+            <div class="solution-copy">
+              <h3>控制行李箱大小</h3>
+              <p>快速问答默认只带较小上下文；复杂任务可用完整额度。内容太多时，先拿掉低优先级材料，必要时再截短，避免一次塞爆。</p>
+            </div>
+            <div class="mini-tags" aria-label="默认上下文预算">
+              <span class="mini-tag">快速问答：约 16,000 字符</span><span class="mini-tag">完整任务：约 60,000 字符</span>
+            </div>
+          </article>
+
+          <article class="solution">
+            <span class="solution-number">03</span>
+            <div class="solution-copy">
+              <h3>把同一份任务翻译给不同工具</h3>
+              <p>Claude、Kimi、Grok、Agy 和 API 的启动方式不同。适配器会把统一交接单变成每个工具听得懂的命令，所以路由层不用为每家重写一遍。</p>
+            </div>
+            <div class="mini-tags" aria-label="已适配的执行方式">
+              <span class="mini-tag">本地 CLI</span><span class="mini-tag">直连 API</span><span class="mini-tag">通用命令适配</span>
+            </div>
+          </article>
+
+          <article class="solution">
+            <span class="solution-number">04</span>
+            <div class="solution-copy">
+              <h3>把交接过程留在项目里</h3>
+              <p>任务、当时的上下文、过程输出和最终答案会进入项目本地归档。之后可以搜索、收藏、回放或导出，不必靠记忆找结论。</p>
+            </div>
+            <div class="mini-tags" aria-label="归档能力">
+              <span class="mini-tag">搜索</span><span class="mini-tag">收藏</span><span class="mini-tag">回放</span><span class="mini-tag">导出</span><span class="mini-tag">明显密钥默认掩码</span>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="flow">
+      <div class="section-inner">
+        <div class="section-head">
+          <div>
+            <p class="section-index">04 / 完整流程</p>
+            <h2>一句话发出后，里面发生了什么？</h2>
+          </div>
+          <p class="section-intro">下面是从你开口，到答案回来的真实主链路。</p>
+        </div>
+
+        <ol class="flow">
+          <li class="flow-step">
+            <span class="flow-number">01</span>
+            <div class="flow-copy"><h3>你提出明确任务</h3><p>例如：“让 Grok 只读检查当前 diff，按风险排序。”任务不能为空，也要说清楚要谁做什么。</p></div>
+          </li>
+          <li class="flow-step">
+            <span class="flow-number">02</span>
+            <div class="flow-copy"><h3>Codeck 检查该执行者能不能做</h3><p>它确认执行者存在、当前模式允许、权限合适。MCP 入口不会自动启动可写文件或可跑命令的高权限执行者。</p></div>
+          </li>
+          <li class="flow-step">
+            <span class="flow-number">03</span>
+            <div class="flow-copy"><h3>收集这次需要的项目材料</h3><p>任务、项目说明、约束、分支、最近提交、Git 状态、当前差异、README、规则文件和被点名的源码被整理在一起。</p></div>
+          </li>
+          <li class="flow-step">
+            <span class="flow-number">04</span>
+            <div class="flow-copy"><h3>按预算删减并生成交接单</h3><p>重要信息优先保留；次要材料超出长度时会被省略或截短。交接单最后是一份结构化 Markdown，也就是容易阅读的纯文本。</p></div>
+          </li>
+          <li class="flow-step">
+            <span class="flow-number">05</span>
+            <div class="flow-copy"><h3>通过对应 CLI 或 API 发给外部模型</h3><p>适配器使用该工具需要的参数启动进程，或调用它的网络接口。这里是数据真正离开 Codeck 本地整理区的地方。</p></div>
+          </li>
+          <li class="flow-step">
+            <span class="flow-number">06</span>
+            <div class="flow-copy"><h3>边运行，边记录</h3><p>输出会逐步保存。若 MCP 等了接近 45 秒还没完成，先返回一个 runId（运行编号）；任务继续跑，之后用 wait_run 取结果。</p></div>
+          </li>
+          <li class="flow-step">
+            <span class="flow-number">07</span>
+            <div class="flow-copy"><h3>答案回来，Codex 继续主持</h3><p>Codeck 返回结果与使用量；Codex 和你负责判断哪些建议可信、是否落地。归档保留这次交接的来龙去脉。</p></div>
+          </li>
+        </ol>
+
+        <p class="boundary-note">最重要的分界线在第 5 步：整理和归档默认在本地，但送给外援的内容会到达那个模型的服务商。</p>
+      </div>
+    </section>
+
+    <section class="section" id="modes">
+      <div class="section-inner">
+        <div class="section-head">
+          <div>
+            <p class="section-index">05 / 使用方式</p>
+            <h2>不同命令，代表不同授权</h2>
+          </div>
+          <p class="section-intro">先预览、只咨询、授权实施、多人对比，是四件不同的事。Codeck 把它们分开，避免“只是问问”变成“直接动手”。</p>
+        </div>
+
+        <p class="scroll-hint">手机上可左右滑动查看完整表格。</p>
+        <div class="mode-table-wrap" role="region" tabindex="0" aria-label="Codeck 命令与授权方式对照表">
+          <table>
+            <thead><tr><th>命令</th><th>大白话</th><th>会不会调用外援</th><th>典型用途</th></tr></thead>
+            <tbody>
+              <tr><td>pick</td><td>先看看这活准备交给谁</td><td>不会</td><td>预览路由，避免叫错人</td></tr>
+              <tr><td>ask</td><td>请外援只给意见</td><td>会</td><td>分析、审查、解释、第二意见</td></tr>
+              <tr><td>delegate</td><td>明确授权外援实施</td><td>会</td><td>写文件或运行命令；高权限执行者在命令行需要确认</td></tr>
+              <tr><td>compare</td><td>同一道题交给多个外援</td><td>会，多次</td><td>找共识、看分歧、比较方案</td></tr>
+              <tr><td>wait</td><td>继续等上次没跑完的活</td><td>不会新开任务</td><td>用 runId 取回长任务结果</td></tr>
+              <tr><td>replay</td><td>拿旧交接单再跑一次</td><td>会，新建一次运行</td><td>复现旧分析，或与当前项目状态对照</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="architecture">
+      <div class="section-inner">
+        <div class="section-head">
+          <div>
+            <p class="section-index">06 / 代码结构</p>
+            <h2>如果打开源码，该从哪里看？</h2>
+          </div>
+          <p class="section-intro">项目是一个 Node.js + TypeScript 命令行工具，同时提供 MCP（让 Codex 调本地工具的接口）。核心文件各管一件事。</p>
+        </div>
+
+        <div class="source-map">
+          <div class="source-map-head"><span>src / 项目主干地图</span><span class="window-dots" aria-hidden="true"><span></span><span></span><span></span></span></div>
+          <div class="file-list">
+            <div class="file-row"><span class="file-name">index.ts</span><span class="file-job">命令行总入口：把 init、ask、compare、wait、replay 等命令接到真正逻辑上。</span></div>
+            <div class="file-row"><span class="file-name">mcp.ts</span><span class="file-job">Codex 接口：把 Codeck 的能力暴露成可以在对话里调用的本地工具。</span></div>
+            <div class="file-row"><span class="file-name">config.ts</span><span class="file-job">规则本：默认执行者、关键词、权限、上下文长度、归档选项都在这里。</span></div>
+            <div class="file-row"><span class="file-name">context.ts</span><span class="file-job">行李箱打包员：读取任务、Git、README、规则和相关文件，并负责删减。</span></div>
+            <div class="file-row"><span class="file-name">router.ts</span><span class="file-job">调度中心：选执行者、检查权限、启动任务、等待、取消、对比和交接。</span></div>
+            <div class="file-row"><span class="file-name">adapters.ts</span><span class="file-job">翻译器：把统一任务转换成 Claude、Kimi、Grok、Agy、Codex 或 API 各自需要的调用方式。</span></div>
+            <div class="file-row"><span class="file-name">archive.ts</span><span class="file-job">档案柜：本地保存、掩码明显密钥、搜索、收藏、回放、导出和删除。</span></div>
+            <div class="file-row"><span class="file-name">models.ts</span><span class="file-job">共同表格：规定任务、执行者、上下文和运行记录都长什么样。</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="boundary">
+      <div class="section-inner">
+        <div class="section-head">
+          <div>
+            <p class="section-index">07 / 权限与数据边界</p>
+            <h2>它很有用，但不是魔法保险箱</h2>
+          </div>
+          <p class="section-intro">这部分最容易被宣传语带过去，也最值得先看懂。</p>
+        </div>
+
+        <div class="guardrails">
+          <article class="guardrail">
+            <h3>它已经做的保护</h3>
+            <ul class="check-list">
+              <li>在 Codex 的默认使用约定里，只有你明确点名外援才交接。</li>
+              <li><code>pick</code> 可以先看路由结果，不发出请求。</li>
+              <li>MCP 不会自动运行可写文件或可执行命令的高权限配置。</li>
+              <li>本地归档默认掩码常见 API Key、Token 和私钥样式。</li>
+              <li>归档文件使用收紧的本地文件权限，超长内容另存到受控目录。</li>
+            </ul>
+          </article>
+
+          <article class="guardrail warning">
+            <h3>它不能替你保证的事</h3>
+            <ul class="check-list">
+              <li>它不提供模型账号、订阅、额度或网络可用性。</li>
+              <li>一旦明确发送，选中的项目内容会进入外部模型服务。</li>
+              <li>“只读”配置首先是一份权限声明；是否硬隔离，还要看底层 CLI 有没有真正的沙箱。</li>
+              <li>自动掩码只能抓常见秘密，不能保证发现所有敏感信息。</li>
+              <li>外部模型给出的建议仍可能出错，最后必须由 Codex、测试和人来验证。</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="truth-box">
+          <h3>最稳妥的第一次使用</h3>
+          <p>先在不含敏感资料的小项目里跑一次只读 <code>ask</code>。检查行李箱带了什么、外部 CLI 登录是否正常、结果是否能顺利回来，再决定要不要扩大范围。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="start">
+      <div class="section-inner">
+        <div class="section-head">
+          <div>
+            <p class="section-index">08 / 最短上手路径</p>
+            <h2>第一次跑通，只要三步</h2>
+          </div>
+          <p class="section-intro">前提：Node.js 20 或更高版本；你还需要至少一个已经安装并登录的外部 AI CLI，或一个已经配置好密钥的 API 执行者。</p>
+        </div>
+
+        <div class="quickstart">
+          <article class="setup-step">
+            <div><h3>安装 Codeck 命令</h3><p>在 Codeck 仓库根目录安装依赖、构建并链接到系统命令。</p></div>
+            <pre><code>npm install
+npm run build
+npm link
+codeck doctor</code></pre>
+          </article>
+
+          <article class="setup-step">
+            <div><h3>在目标项目初始化</h3><p>生成本项目的规则本，再填写项目说明与不能碰的禁区。</p></div>
+            <pre><code>cd 你的项目目录
+codeck init
+
+# 然后填写：
+.codeck/project.md
+.codeck/constraints.md</code></pre>
+          </article>
+
+          <article class="setup-step">
+            <div><h3>先预览，再只读提问</h3><p>第一次不要直接授权改代码，先完成一轮能追溯的只读交接。</p></div>
+            <pre><code>codeck pick "让 Agy 检查当前 diff"
+
+codeck ask antigravity \
+  "检查当前 diff，按风险排序"</code></pre>
+          </article>
+        </div>
+
+        <div class="truth-box">
+          <h3>接入 Codex 后更自然</h3>
+          <p>注册 MCP 服务后，你可以直接在 Codex 对话里说：“让 Kimi 梳理当前模块边界，只读分析。”Codex 继续当主持人，Codeck 在后台完成交接。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="fit">
+      <div class="section-inner">
+        <div class="section-head">
+          <div>
+            <p class="section-index">09 / 适用范围</p>
+            <h2>谁会明显受益？</h2>
+          </div>
+          <p class="section-intro">不是每个项目都需要多模型协作。判断标准很简单：你是否经常为了“再找一个 AI 看看”而重复搬运上下文。</p>
+        </div>
+
+        <div class="fit-grid">
+          <article class="fit-column">
+            <h3>很适合</h3>
+            <ul>
+              <li>日常主力是 Codex，但已经订阅或登录了多个 AI CLI。</li>
+              <li>项目较大，规则、架构和当前改动不适合每次手工复述。</li>
+              <li>经常需要独立审查、方案对比、长代码阅读或专项顾问。</li>
+              <li>希望每次 AI 交接都有记录，之后能搜索和复盘。</li>
+            </ul>
+          </article>
+          <article class="fit-column no">
+            <h3>可能暂时不需要</h3>
+            <ul>
+              <li>只使用一个 AI，从不切换工具。</li>
+              <li>项目很小，复制两段文字已经足够。</li>
+              <li>任何代码都不能发送给外部模型服务。</li>
+              <li>只是想让 Codeck 免费提供模型额度——它不做这件事。</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="faq">
+      <div class="section-inner">
+        <div class="section-head">
+          <div>
+            <p class="section-index">10 / 常见疑问</p>
+            <h2>最后把容易误会的地方说透</h2>
+          </div>
+        </div>
+
+        <div class="faq">
+          <details>
+            <summary>Codeck 和直接复制粘贴有什么本质区别？</summary>
+            <p>复制粘贴靠人记得“该带什么”；Codeck 把材料来源、长度控制、执行者权限、长任务续接和留档变成固定流程。项目越大、切换越多，这个差别越明显。</p>
+          </details>
+          <details>
+            <summary>它会不会自己决定换成另一个模型？</summary>
+            <p>在 Codex 的默认使用约定里，不会：你要先明确点名 Codeck 或某个外援。若你自己在终端主动运行 <code>codeck auto</code>，它才会按项目里的关键词规则和默认执行者选择。</p>
+          </details>
+          <details>
+            <summary>Codeck 是“多模型共识系统”吗？</summary>
+            <p>它提供把同一任务交给多个执行者的 <code>compare</code> 能力，但不同答案不等于共识。真正的工作仍是找出它们在哪些事实上一致、哪里冲突，再由主持者决定。</p>
+          </details>
+          <details>
+            <summary>长任务超过宿主等待时间，会不会丢？</summary>
+            <p>不会立刻丢。MCP 调用接近等待上限时可以先返回 runId，外部进程继续运行；之后用 <code>wait_run</code> 或 <code>codeck wait</code> 取回当前状态和最终结果。</p>
+          </details>
+          <details>
+            <summary>历史记录保存在哪里？</summary>
+            <p>默认保存在当前项目的 <code>.codeck/</code> 目录里，优先使用本地 SQLite 数据库；环境不支持时会退回 JSON 文件。它不是云端团队知识库，除非你自己导出或同步。</p>
+          </details>
+          <details>
+            <summary>这个项目最关键的设计选择是什么？</summary>
+            <p>不是“自动选最强模型”，而是“Codex 始终当主持人，用户明确点名外援”。这样谁被调用、什么内容被发送、外援能做什么，都更容易说清楚。</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="final-word">
+      <div class="section-inner">
+        <p class="section-index" style="color: var(--yellow);">THE WHOLE IDEA</p>
+        <h2>让 AI 换人，别让项目失忆。</h2>
+        <p>Codeck 把“找另一个模型看看”从一次临时复制粘贴，变成可控制、可续接、可追溯的正式交接。你仍然掌舵，Codex 仍然主持，外部模型只在被点名时进场。</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>Codeck v0.4.0 · 本页依据 README 与核心源码整理</span>
+      <a href="#top">回到顶部 ↑</a>
+    </div>
+  </footer>
+</body>
+</html>

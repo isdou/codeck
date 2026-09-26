@@ -138,6 +138,7 @@ function printRunSummary(run: any) {
       )
     );
   }
+  if (run.updateNotice) console.log(chalk.yellow(`\n${run.updateNotice}`));
 }
 
 program
@@ -160,14 +161,13 @@ program
   .action(() => {
     try {
       const res = runDoctor();
-      if (!res.configExists) {
-        console.log(chalk.red('Codeck is not initialized. Run "codeck init" first.'));
-        process.exit(1);
-      }
       console.log(chalk.bold('\nCodeck Doctor\n'));
+      if (res.initialized) console.log(chalk.green('Initialized .codeck for this project automatically.'));
       console.log(`${chalk.green('config')} ${getConfigPath()}`);
       for (const agent of res.agents) {
         console.log(`${agent.exists ? chalk.green('ok') : chalk.red('missing')} ${agent.agentName} adapter=${agent.adapter} command=${agent.command} - ${agent.message}`);
+        if (!agent.exists && agent.installCommand) console.log(chalk.gray(`  after approval: ${agent.installCommand}`));
+        for (const step of agent.exists ? [] : (agent.setup || [])) console.log(chalk.gray(`  - ${step}`));
       }
       console.log(`\nExecutors:\n${res.executors.map((name) => `- ${name}`).join('\n')}`);
     } catch (err: any) {
