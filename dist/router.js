@@ -3,7 +3,8 @@ import path from 'path';
 import { getAdapter, formatRunMarkdown, prepareAdapterRequest } from './adapters.js';
 import { archiveRun, curateArchivedRun, deleteArchivedRun, exportArchive, getArchivedRun, importLegacyRuns, listArchivedRuns, redactRunForStorage, } from './archive.js';
 import { getCodeckDir, loadConfig } from './config.js';
-import { buildContext } from './context.js';
+import { buildContext, resolveProjectFile } from './context.js';
+import { getUpdateNotice } from './version.js';
 export class CodeckError extends Error {
     code;
     details;
@@ -135,6 +136,23 @@ export function resolveExecutor(config, task, mode, caller) {
         caller,
     });
 }
+function executorKey(value) {
+    return value.trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+}
+export function resolveExplicitExecutor(config, requested) {
+    const names = Object.keys(config.executors);
+    const requestedKey = executorKey(requested);
+    const direct = names.find((name) => executorKey(name) === requestedKey);
+    if (direct)
+        return direct;
+    const alias = {
+        agy: 'antigravity',
+        'agy cli': 'antigravity',
+        'google agy': 'antigravity',
+        'antigravity cli': 'antigravity',
+    }[requestedKey];
+    return names.find((name) => executorKey(name) === alias) || requested.trim();
+}
 export function pickExecutor(task, mode = 'ask', cwd = process.cwd(), caller) {
     assertTask(task);
     return resolveExecutor(loadConfig(cwd), task, mode, caller);
@@ -153,12 +171,15 @@ function sumUsage(runs) {
 }
 const activeJobs = new Map();
 const completedJobs = new Map();
-function validateRoute(input, options) {
-    const cwd = options.cwd || process.cwd();
+function validateRoute(input, options, runIdValue) {
+    const cwd = fs.realpathSync(options.cwd || process.cwd());
     const config = loadConfig(cwd);
     assertTask(input.task);
+    if (options.caller === 'mcp' && (!input.executor || input.executor === 'auto')) {
+        throw new CodeckError('explicit_executor_required', 'Codeck requires the user to explicitly name an executor for MCP calls.');
+    }
     const executor = input.executor && input.executor !== 'auto'
-        ? input.executor
+        ? resolveExplicitExecutor(config, input.executor)
         : resolveExecutor(config, input.task, input.mode, options.caller);
     const profile = config.executors[executor];
     if (!profile) {
@@ -178,11 +199,45 @@ function validateRoute(input, options) {
     if (!agent) {
         throw new CodeckError('agent_not_found', `Agent "${profile.agent}" for executor "${executor}" is not configured.`);
     }
+    const adapter = getAdapter(agent.adapter);
+    const readiness = adapter.probe(agent);
+    if (!readiness.ok) {
+        const nextSteps = readiness.setup || [];
+        const guidance = [
+            readiness.message,
+            ...nextSteps,
+            readiness.installCommand ? `After the user approves installation, the Codeck CLI helper is: ${readiness.installCommand}` : '',
+        ].filter(Boolean).join('\n');
+        throw new CodeckError('executor_setup_required', `Executor "${executor}" is not ready.\n${guidance}`, {
+            executor,
+            agent: profile.agent,
+            adapter: adapter.name,
+            command: agent.command,
+            reason: readiness.message,
+            setup: nextSteps,
+            installCommand: readiness.installCommand,
+            requiresConsent: readiness.requiresConsent === true,
+        });
+    }
+    let files;
+    try {
+        files = input.files?.map((file) => resolveProjectFile(cwd, file));
+    }
+    catch (error) {
+        throw new CodeckError('file_outside_project', error.message);
+    }
     const maxConfiguredContext = options.caller === 'mcp' ? config.budget.mcp_max_context_chars : config.budget.max_context_chars;
-    const maxContext = input.mode === 'ask' && !input.files?.length && !options.allowOverBudget
+    const maxContext = input.mode === 'ask' && !files?.length && !options.allowOverBudget
         ? Math.min(config.budget.ask_context_chars, maxConfiguredContext)
         : maxConfiguredContext;
-    const context = options.contextOverride || buildContext(cwd, { task: input.task, executor: profile, files: input.files, maxChars: maxContext });
+    const context = options.contextOverride || buildContext(cwd, {
+        task: input.task,
+        brief: input.brief,
+        includeRepository: input.includeRepository,
+        executor: profile,
+        files,
+        maxChars: maxContext,
+    });
     if (context.summary.chars > maxContext && !options.allowOverBudget && !options.contextOverride) {
         throw new CodeckError('budget_exceeded', 'Context exceeds configured budget.', {
             actual: context.summary.chars,
@@ -197,11 +252,12 @@ function validateRoute(input, options) {
         profile,
         task: input.task,
         context,
-        files: input.files,
+        files,
         cwd,
+        runId: runIdValue,
     };
     const prepared = options.preparedOverride || prepareAdapterRequest(adapterInput);
-    return { cwd, config, executor, profile, agent, context, maxContext, prepared };
+    return { cwd, config, executor, profile, agent, context, files, maxContext, prepared };
 }
 async function executeRouteJob(initial, route, input, controller) {
     let output = initial.partialOutput || '';
@@ -243,8 +299,9 @@ async function executeRouteJob(initial, route, input, controller) {
             profile: route.profile,
             task: input.task,
             context: route.context,
-            files: input.files,
+            files: route.files,
             cwd: route.cwd,
+            runId: initial.id,
             signal: controller.signal,
             onProgress,
             prepared: route.prepared,
@@ -295,10 +352,10 @@ async function executeRouteJob(initial, route, input, controller) {
     }
 }
 export async function startRouteTask(input, options = {}) {
-    const route = validateRoute(input, options);
+    const id = runId();
+    const route = validateRoute(input, options, id);
     const controller = new AbortController();
     const timestamp = new Date().toISOString();
-    const id = runId();
     const initial = {
         id,
         date: timestamp,
@@ -427,6 +484,7 @@ export async function replayRun(runIdValue, options = {}) {
     return routeTask(replayInput, { ...options, cwd, contextOverride, preparedOverride });
 }
 export async function routeTask(input, options = {}) {
+    const updateNoticePromise = getUpdateNotice();
     const cwd = options.cwd || process.cwd();
     const config = loadConfig(cwd);
     const initial = await startRouteTask(input, options);
@@ -442,7 +500,8 @@ export async function routeTask(input, options = {}) {
             logPath: run.logPath,
         });
     }
-    return run;
+    const updateNotice = await updateNoticePromise;
+    return updateNotice ? { ...run, updateNotice } : run;
 }
 export async function compareExecutors(input, options = {}) {
     assertTask(input.task);
@@ -553,7 +612,7 @@ export async function compareExecutors(input, options = {}) {
 }
 export function createRawHandoff(run) {
     return [
-        '=== DEVDECK RAW HANDOFF ===',
+        '=== CODECK SPECIALIST RESULT ===',
         `Run: ${run.id}`,
         `Mode: ${run.mode}`,
         `Executor: ${run.executor}`,

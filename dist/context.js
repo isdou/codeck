@@ -10,8 +10,16 @@ function runGitCommand(cmd, cwd) {
         return '';
     }
 }
-function relPath(cwd, filePath) {
-    return path.relative(cwd, path.resolve(cwd, filePath)).replaceAll(path.sep, '/');
+function isInside(root, candidate) {
+    return candidate === root || candidate.startsWith(`${root}${path.sep}`);
+}
+export function resolveProjectFile(cwd, filePath) {
+    const root = fs.realpathSync(cwd);
+    const absolute = fs.realpathSync(path.resolve(root, filePath));
+    if (!isInside(root, absolute) || !fs.statSync(absolute).isFile()) {
+        throw new Error(`File is outside the project or is not a regular file: ${filePath}`);
+    }
+    return path.relative(root, absolute).replaceAll(path.sep, '/');
 }
 function matchesPattern(file, pattern) {
     const normalized = file.replaceAll(path.sep, '/');
@@ -25,9 +33,9 @@ function isExcluded(file, excludes) {
     return excludes.some((pattern) => matchesPattern(file, pattern));
 }
 function readTextFile(cwd, file, maxBytes) {
-    const fullPath = path.resolve(cwd, file);
-    const relative = relPath(cwd, fullPath);
     try {
+        const relative = resolveProjectFile(cwd, file);
+        const fullPath = path.resolve(fs.realpathSync(cwd), relative);
         const stat = fs.statSync(fullPath);
         if (!stat.isFile() || stat.size > maxBytes)
             return null;
@@ -46,10 +54,19 @@ function readTextFile(cwd, file, maxBytes) {
 }
 function walkFiles(cwd, dir, excludes, maxFiles) {
     const out = [];
-    const visit = (relativeDir) => {
+    const root = fs.realpathSync(cwd);
+    let start;
+    try {
+        start = fs.realpathSync(path.resolve(root, dir));
+        if (!isInside(root, start) || !fs.statSync(start).isDirectory())
+            return out;
+    }
+    catch {
+        return out;
+    }
+    const visit = (absoluteDir) => {
         if (out.length >= maxFiles)
             return;
-        const absoluteDir = path.join(cwd, relativeDir);
         let entries;
         try {
             entries = fs.readdirSync(absoluteDir, { withFileTypes: true });
@@ -60,16 +77,17 @@ function walkFiles(cwd, dir, excludes, maxFiles) {
         for (const entry of entries) {
             if (out.length >= maxFiles)
                 break;
-            const relative = path.join(relativeDir, entry.name).replaceAll(path.sep, '/');
+            const absolute = path.join(absoluteDir, entry.name);
+            const relative = path.relative(root, absolute).replaceAll(path.sep, '/');
             if (isExcluded(relative, excludes))
                 continue;
             if (entry.isDirectory())
-                visit(relative);
+                visit(absolute);
             if (entry.isFile())
                 out.push(relative);
         }
     };
-    visit(dir);
+    visit(start);
     return out;
 }
 function filesForInclude(cwd, include, excludes, maxFiles) {
@@ -122,13 +140,22 @@ export function buildContext(cwd = process.cwd(), options = {}) {
     const config = loadConfig(cwd);
     const contextConfig = config.context;
     const resources = [];
-    const isGitRepo = fs.existsSync(path.join(cwd, '.git'));
+    const includeRepository = options.includeRepository !== false;
+    const isGitRepo = includeRepository && runGitCommand('git rev-parse --is-inside-work-tree', cwd) === 'true';
     pushResource(resources, {
         type: 'text',
         label: 'Codeck Task',
         content: options.task || '',
         chars: (options.task || '').length,
     }, true);
+    if (options.brief?.trim()) {
+        pushResource(resources, {
+            type: 'text',
+            label: 'Host Brief',
+            content: options.brief.trim(),
+            chars: options.brief.trim().length,
+        }, true);
+    }
     const projectPath = path.join(getCodeckDir(cwd), 'project.md');
     if (fs.existsSync(projectPath)) {
         pushResource(resources, readTextFile(cwd, projectPath, contextConfig.max_file_bytes), true);
@@ -154,7 +181,7 @@ export function buildContext(cwd = process.cwd(), options = {}) {
             }
         }
     }
-    if (contextConfig.include_readme) {
+    if (includeRepository && contextConfig.include_readme) {
         for (const readme of ['README.md', 'readme.md', 'README', 'Readme.md']) {
             const resource = readTextFile(cwd, readme, contextConfig.max_file_bytes);
             if (resource) {
@@ -164,18 +191,19 @@ export function buildContext(cwd = process.cwd(), options = {}) {
         }
     }
     const requested = new Set(options.files || []);
-    for (const include of options.executor?.context_include || []) {
-        for (const file of filesForInclude(cwd, include, contextConfig.exclude, contextConfig.max_files)) {
-            requested.add(file);
+    if (includeRepository) {
+        for (const include of options.executor?.context_include || []) {
+            for (const file of filesForInclude(cwd, include, contextConfig.exclude, contextConfig.max_files)) {
+                requested.add(file);
+            }
         }
     }
     for (const file of requested) {
-        const relative = relPath(cwd, file);
-        if (isExcluded(relative, contextConfig.exclude))
+        if (isExcluded(file, contextConfig.exclude))
             continue;
-        pushResource(resources, readTextFile(cwd, relative, contextConfig.max_file_bytes));
+        pushResource(resources, readTextFile(cwd, file, contextConfig.max_file_bytes));
     }
-    if (contextConfig.include_agent_files) {
+    if (includeRepository && contextConfig.include_agent_files) {
         const agentFiles = fs.readdirSync(cwd)
             .filter((file) => {
             const upper = file.toUpperCase();

@@ -1,9 +1,10 @@
 # Codeck
 
-**Codex-first context handoff for Gemini API/legacy CLI, Claude Code, Kimi Code, Grok Build, and Antigravity CLI.**
+**Keep building in Codex. Call the right model only when you need it.**
 
-在 Codex 里明确说“用 Gemini / Claude / Kimi / Grok / Antigravity 看一下”时，Codeck 才会把当前仓库的 Git 状态、diff、AGENTS 规则和项目说明打包交给对应的本地 AI CLI。
-不用重新解释项目，也不替用户擅自选择模型。
+Codeck 让你留在 Codex 里，按需调用 Gemini、Claude、Kimi 等模型最擅长的能力，并把结果交回 Codex，继续完成产品。
+
+Codex 始终是主工作台和主持人。只有当你明确点名外部模型时，Codeck 才会为这次任务准备恰当的项目背景并调用它；不用切换工作台，不用重新解释产品，也不替你擅自选择模型。
 
 ---
 
@@ -24,37 +25,42 @@
 npx skills add https://github.com/isdou/codeck --skill codeck
 ```
 
-> 这个 Skill 通过本地 Codeck CLI 执行模型协作。首次使用前还需要按下方“3 步极速上手”完成 CLI 安装与 `codeck doctor` 检查。
+> 单独安装 Skill 只会添加“何时以及怎样调用 Codeck”的指令，不会注册 MCP 运行时。推荐安装下方的 Codex 插件：它同时包含 Skill 和已打包的 Codeck MCP，无需 clone 仓库、`npm install`、`npm link` 或手动 `codeck init`。
 
 ## 🎯 为什么需要 Codeck？
 
-作为一个 AI 辅助编程的开发者，你可能：
-1. **超级喜欢 Codex** 的日常流畅体验；
-2. 但偶尔觉得 **Claude Code** 读复杂代码、梳理架构和跑 Review 时更胜一筹；
-3. 又或者在面对大项目、前端 UI、代码 Review 或长上下文任务时，想使用 **Gemini API/企业版 CLI**、**Kimi Code**、**Grok Build** 或 **Antigravity CLI**。
+当你把 Codex 作为完整产品开发的主工作台时，可能仍会对不同模型有明确偏好：
 
-但每次在不同 CLI 工具之间切换，都面临一个巨大痛点：**不得不把项目背景、框架技术栈、甚至当前写了一半的 Diff 代码重新复制一遍，再唠叨地向新 AI 解释一次。**
+1. 开发和最终决策留在 **Codex**；
+2. 产品文案、营销表达或视觉语言想交给 **Gemini**；
+3. 架构复核想听 **Claude**，长文档和大上下文任务想交给 **Kimi**；
+4. 完成局部专家任务后，继续回到 Codex 判断、修改和落地。
+
+真正的麻烦不是缺少另一个聊天窗口，而是：**一旦离开 Codex，就要重新解释产品定位、目标用户、当前进度、已经做出的决策和这次任务的约束。**
 
 **Codeck 就是为了解决这个问题而生的。**  
-它可以被看作是 **Codex 的本地上下文交接器**：只有当你明确点名外部模型时，它才把当前项目上下文打包给你订阅的本地 AI CLI。
+它是 **Codex-first 的外部模型技能调用层**：Codex 是 Host，Gemini、Claude、Kimi、Grok 或 Antigravity 是被临时请来的 Specialist，Codeck 负责准备这一次任务所需的最小背景，并把结果带回 Codex。
 
 ---
 
 ## ✨ 核心特性
 
-- 📦 **零配置上下文打包**：自动提取 Git 状态、Current Diff、项目背景、全局约束规则、相关源文件，融合成标准上下文。
-- 🧭 **显式模型触发**：只有任务里明确提到 Gemini、Claude、Kimi、Grok、Antigravity 等执行器时，才交给对应工具。
-- 🔎 **可预览路由 (`pick`)**：不确定会交给谁时，先预览，不直接执行。
-- 📊 **多模型同台竞技 (`compare`)**：输入一条任务，让 Claude 和 Gemini 针对同一上下文分别给出方案，方便对比。
-- 🔌 **Codex MCP 无缝集成**：一次性把 Codeck 注册为 Codex 的 MCP 服务，以后你在 Codex 聊天时输入 `“用 Agy 帮我分析当前实现”`，Codex 就会在后台自动调用 Codeck，不需要手动切出命令行！
+- 🧠 **Codex 始终主持**：外部模型只完成被点名的局部专家任务，结果回到当前 Codex 对话继续判断和落地。
+- 🧭 **用户明确点名**：MCP 调用必须指定 Gemini、Claude、Kimi、Grok、Antigravity 等已配置执行器；Codeck 不替用户自动选模。
+- 🎯 **名称稳定解析**：Executor 名不区分大小写；`Agy` / `AGY` / `Antigravity` 统一调用 `antigravity`，而不是创建 Codex 内部 subagent。`Gemini` 默认通过 Agy 调用；只有明确说 `Gemini CLI`、`Gemini API` 或 `Gemini Image` 才走对应的独立 Executor。
+- 📦 **任务型上下文包**：始终包含项目说明和约束，可附上 Codex 从当前对话整理的任务背景；文案等非代码任务无需发送 Git diff 和源码。
+- 🔌 **Codex MCP 无缝集成**：在 Codex 中说 `“让 Gemini 根据当前产品背景写 App Store 文案”`，Codeck 在后台完成调用并把结果直接返回当前对话。
+- 🛡️ **仓库上下文按需加入**：架构 Review 等代码任务可以显式加入 Git 状态、diff、规则和相关文件；产品文案默认只需要最小背景。
 - 🗂️ **项目级交接归档**：每次经由 Codeck 发出的请求都会保存到项目内的 SQLite 归档，默认掩码明显密钥，可搜索、回放、收藏和导出。
 - ⏳ **长任务自动续接**：MCP 宿主等待接近 60 秒时，Codeck 返回 `runId` 并让 Agy 等执行器继续后台运行，随后通过 `wait_run` 取回完整结果。
+- 🔔 **非阻塞更新提醒**：调用完成后才提示新版本；每个 MCP 进程最多每 6 小时检查一次，1.5 秒超时且失败静默，不传送项目内容。可用 `CODECK_DISABLE_UPDATE_CHECK=1` 关闭。
+- 🪄 **首次使用自动准备**：插件内置单文件 MCP 运行时；第一次在某个项目调用时自动创建缺失的 `.codeck` 配置与说明文件，并在执行前检查被点名的模型 CLI。
 
 ---
 
-## 🚀 3步极速上手
+## 🚀 2 步极速上手
 
-### 侧边栏插件安装（推荐）
+### 第一步：安装侧边栏插件（推荐）
 
 如果你使用的是支持插件的 Codex，可以直接从 Codeck 的 Git marketplace 安装：
 
@@ -70,10 +76,13 @@ codex plugin marketplace add /绝对路径/to/codeck
 codex plugin add codeck@codeck
 ```
 
-安装完成后重启 Codex 或新开任务，Codeck 会出现在插件侧边栏中。插件本身不包含外部模型；你仍需要在本机安装并登录要调用的 CLI。
+安装完成后重启 Codex 或新开任务，Codeck 会出现在插件侧边栏中。插件已经包含可直接启动的 Codeck MCP 运行时，唯一的基础运行前提是 PATH 中有 Node.js 20 或更高版本。它不包含外部模型；只需安装并登录你实际要调用的 provider CLI。
 
-### 第一步：安装 Codeck
-确保本地已安装 Node.js 20 或更高版本。克隆仓库后，在 Codeck 项目根目录执行：
+首次调用会在当前项目安全地补齐 `.codeck/config.toml`、`.codeck/project.md` 和 `.codeck/constraints.md`，已存在的文件不会被覆盖。若被点名的 CLI 缺失，Codeck 会在调用模型前返回具体原因和下一步；安装第三方 CLI 前仍会要求你的同意，登录、OAuth 和 API key 始终由你完成。
+
+### 本地开发或独立 CLI（可选）
+
+只有开发 Codeck 本身或需要全局 `codeck` 命令时，才需要克隆仓库并执行：
 
 ```bash
 npm install
@@ -81,7 +90,7 @@ npm run build
 npm link
 ```
 
-运行健康检查，确认是否安装成功，以及本地有哪些可用的 AI 命令行工具：
+运行健康检查，确认本地有哪些可用的 AI 命令行工具。若当前项目尚未初始化，`doctor` 会自动完成初始化：
 ```bash
 codeck doctor
 ```
@@ -96,28 +105,31 @@ codeck doctor
 
 > **Google CLI 迁移提示**：自 2026 年 6 月 18 日起，Google 不再为个人/免费账户的 Gemini CLI 请求提供服务。Codeck v0.4 将 Antigravity/Agy 作为默认 Google CLI 路径；旧的 `gemini` CLI 适配器仍保留给企业许可用户，`gemini_api` 和 `gemini_image` 仍走 Gemini API。详见 [Google 的迁移公告](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/)。
 
-Codeck 会为 Agy 显式固定 `[agents.antigravity].model` 对应的 agent，并把较长的路由上下文暂存到 `.codeck/context.md`，避免 Agy 的 Auto/planner 因首轮长提示切换到受地区限制的规划端点。可用 `agy agent` 查看当前可选 agent，再按需修改 `model`。
+Codeck 会通过 Agy 的 `--model` 显式固定 `[agents.antigravity].model`，并将选定的任务包直接传给模型，避免 headless 模式额外申请文件读取权限。Agy 的只读咨询使用 plan + sandbox 模式。可用 `agy models` 查看当前可选模型，再按需修改 `model`。
 
-> **数据边界**：Codeck 在本地收集和组装 Git 状态、diff、项目说明及规则；当你明确点名外部执行器后，选定的上下文会通过该执行器自己的 CLI/服务发送给对应模型提供方。请在发送前检查项目内容和提供方政策。Codeck 的项目归档默认保存在本地，并掩码明显密钥。
+> **数据边界**：Codeck 在本地组装本次任务、项目说明、约束、Codex 提供的 brief，以及用户明确选择的文件；Git、diff 和源码只在需要仓库上下文时加入。当你明确点名外部执行器后，这个任务包会通过该执行器自己的 CLI/服务发送给对应模型提供方。Codeck 的项目归档默认保存在本地，并掩码明显密钥。
 
-### 第二步：在你的代码项目中初始化
-切换到你需要开发的项目目录下（例如你的 Web 项目或 Python 项目），执行：
+### 项目说明（首次调用自动生成）
+
+你不再需要把 `codeck init` 当作前置步骤。若希望在第一次调用前先填写项目背景，也可以在项目目录主动执行：
 ```bash
 codeck init
 ```
 这会在当前项目下创建 `.codeck/` 目录，里面包含：
 - `config.toml`：路由规则、Executor（执行器）权限、上下文预算设置。
-- `project.md`：**在此填写你的项目技术栈与架构设计**，方便 AI 快速融入。
-- `constraints.md`：**在此填写开发规范与避坑指南**，AI 绝不敢违背。
+- `project.md`：填写产品定位、目标用户、核心差异和技术实现，让被点名的模型不用重新认识项目。
+- `constraints.md`：填写品牌语气、禁用表达、输出限制，以及开发规范与避坑指南。
 
-### 第三步：路由你的第一个任务
-先预览任务会交给哪个 Executor：
+### 第二步：在 Codex 中点名你的第一个 Specialist
+
+完成下方 MCP 配置后，直接在 Codex 中说：
+
+> “让 Gemini 根据当前产品背景，生成 App Store 副标题、简介和完整描述。”
+
+Codex 会整理这次任务需要的背景，Codeck 调用你点名的 Gemini 执行器，并把结果带回当前对话。终端模式仍可作为 fallback：
+
 ```bash
-codeck pick "用 Agy 分析当前 diff 有没有明显问题"
-```
-或者显式指定你要使用的工具：
-```bash
-codeck ask antigravity "分析当前仓库有什么潜在的安全风险"
+codeck ask gemini_api "根据 .codeck/project.md 的产品信息写一版 App Store 文案"
 codeck ask kimi "梳理这个项目的模块边界"
 codeck ask grok "Review 当前 diff 并按风险排序"
 ```
@@ -130,7 +142,7 @@ Codeck 的 CLI 命令设计得非常直观，适合日常开发、调试或在�
 
 | 命令 | 示例 | 作用说明 |
 | :--- | :--- | :--- |
-| **`codeck init`** | `codeck init` | 在当前目录下初始化 `.codeck` 配置与上下文描述文件 |
+| **`codeck init`** | `codeck init` | 可选地提前创建 `.codeck`；首次项目调用也会自动完成 |
 | **`codeck doctor`** | `codeck doctor` | 检查本机环境中的各 AI CLI 状态与连接可行性 |
 | **`codeck list`** | `codeck list` | 查看当前项目下可用的 Executor 列表和它们的权限 |
 | **`codeck context`** | `codeck context` | 手动刷新并生成当前项目的上下文快照 `.codeck/context.md` |
@@ -153,16 +165,17 @@ Codeck 的 CLI 命令设计得非常直观，适合日常开发、调试或在�
 
 ## 🧠 核心工作原理
 
-### 1. 上下文是怎样组装的？
-当你在项目下调用 Codeck 时，它会根据以下规则组装一份 Markdown 上下文，并自动控制大小以防撑爆 AI 窗口：
+### 1. 专家任务包是怎样组装的？
+Codeck 以本次任务为中心组装 Markdown 背景，并自动控制大小。项目说明和约束始终可用；Codex 可以附上从当前对话整理的 brief；Git 和源码只在代码任务中显式加入：
 
 ```mermaid
 graph TD
-    A[当前任务 Task] --> F[标准打包上下文 Markdown]
-    B[.codeck/project.md 技术栈说明] --> F
-    C[.codeck/constraints.md 项目规范] --> F
-    D[Git 状态与当前未提交的 Diff] --> F
-    E[被引用的项目源文件] --> F
+    A[用户点名的专家任务] --> F[Specialist Task Package]
+    B[Codex 整理的当前对话 Brief] --> F
+    C[.codeck/project.md 产品与项目背景] --> F
+    D[.codeck/constraints.md 约束与品牌规则] --> F
+    E[用户明确附加的文件] --> F
+    G[可选的 Git / Diff / 源码上下文] --> F
 ```
 
 ### 2. 预算控制 (Budget)
@@ -180,8 +193,9 @@ graph TD
 
 初始化后，你可以在 `.codeck/config.toml` 中精细化定制你的路由策略。
 
-### 1. 自定义路由关键字
-你可以修改 `[routing]` 部分的规则，当任务中出现特定词汇时自动派发给相应的 AI：
+### 1. CLI fallback 的自定义路由关键字
+
+Codex/MCP 的主流程要求用户明确指定执行器。下面的 `[routing]` 规则只用于 `codeck pick` 和 `codeck auto` 等终端 fallback：
 
 ```toml
 [routing]
@@ -200,6 +214,8 @@ keywords = ["architecture", "review", "risk", "架构", "评审", "重构"]
 
 ### 2. 认识内置的 Executor 角色
 Codeck 预设了以下 Executor 配置文件：
+- ✨ **`gemini`**：通用 Gemini Specialist，默认使用维护中的 Antigravity/Agy 路径。
+- 💾 **`gemini_cli`**：仅用于企业许可或 API-key 用户的旧 Gemini CLI。
 - 🧑‍🎨 **`gemini_frontend`**：历史兼容名称，默认通过 Antigravity/Agy 做前端 UI 优化与大上下文分析。
 - 🏗 **`claude_architect`**：调用 Claude，最适合做深度的架构分析和重构 Review。
 - 🌙 **`kimi`**：调用 Kimi Code CLI，用于仓库探索和长上下文分析。
@@ -241,7 +257,7 @@ context_include = ["README.md", "src/**", "current_diff"]
 GEMINI_API_KEY=你的谷歌GeminiAPI秘钥
 ANTHROPIC_API_KEY=你的AnthropicClaudeAPI秘钥
 ```
-Codeck 运行任何指令时会自动读取该文件，并在调用本地 CLI 时自动注入环境变量。你也可以在 `.codeck/config.toml` 里为指定 agent 配置 `env` 字段：
+Codeck 会自动读取该文件。内置 CLI 只传递它需要的 provider 凭据；其他自定义变量请在 `.codeck/config.toml` 里为指定 agent 配置 `env` 字段：
 ```toml
 [agents.claude]
 command = "claude"
@@ -274,18 +290,18 @@ model = "gemini-2.5-pro" # 默认是 gemini-2.5-flash
 ### 1. 添加 MCP 服务
 使用绝对路径（将下面的 `/Users/yourname/codeck` 换成你本机的实际安装路径）向 Codex 注册 MCP：
 ```bash
-codex mcp add codeck -- node /Users/yourname/codeck/dist/index.js mcp start
+codex mcp add codeck -- node /Users/yourname/codeck/dist/codeck.bundle.js mcp start
 ```
 
 ### 2. 在 Codex 里自然对话
-配置完成后，只要你在与 Codex 对话时**提到了已配置外部执行器的名字**，Codex 就会把任务 delegate 给 Codeck。
+配置完成后，只要你在与 Codex 对话时**明确点名了已配置的外部执行器**，Codex 就会把这次局部专家任务交给 Codeck。Codeck 不会因为任务复杂就自行选择外部模型。
 
 **例如，你可以对 Codex 说：**
-> *“帮我 review 一下刚才的改动，用 Agy 分析一下这里有没有潜在的性能瓶颈。”*
+> *“让 Gemini 根据我们刚才定下的定位，写一版 App Store 文案。”*
 >
-> *“让 Kimi 和 Grok 对比一下当前架构的主要风险。”*
+> *“用 Claude 复核一下当前架构方案，只需要给建议，不要修改代码。”*
 
-Codex 将在后台调用 Codeck 唤起本地 Agy，并在对话流中直接呈现 Google 模型给出的专业分析，整个过程上下文丝滑衔接！
+Codex 会把本次任务、必要的产品背景和用户明确选择的项目材料交给 Codeck。外部模型的结果随后直接回到当前对话，由 Codex 继续主持、修改、采用或否决。
 
 ---
 

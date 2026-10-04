@@ -1,7 +1,7 @@
 {
   "name": "codeck",
-  "version": "0.4.0",
-  "description": "Codeck: Local MCP Server & CLI context handoff bridge for Codex, Claude Code, Gemini, Kimi, and Grok.",
+  "version": "0.4.4",
+  "description": "Keep Codex as the host and call user-named external AI specialists with focused project context.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -20,7 +20,7 @@
     "codeck": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/build-bundle.mjs",
     "test": "npm run build && node --test test/codeck.test.mjs",
     "test:gemini-image": "npm run build && node --input-type=module -e \"import assert from 'node:assert/strict'; import { extractGeminiImageParts } from './dist/adapters.js'; const parts = extractGeminiImageParts({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'aGVsbG8=' } }, { inline_data: { mime_type: 'image/jpeg', data: 'd29ybGQ=' } }] } }] }); assert.equal(parts.length, 2); assert.equal(parts[0].mimeType, 'image/png'); assert.equal(parts[1].mimeType, 'image/jpeg');\"",
     "start": "node dist/index.js",
@@ -58,6 +58,7 @@
   "devDependencies": {
     "@types/marked": "^4.0.8",
     "@types/node": "^20.12.12",
+    "esbuild": "^0.28.1",
     "tsx": "^4.10.5",
     "typescript": "^5.4.5"
   }

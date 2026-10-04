@@ -1,97 +1,93 @@
 ---
 name: codeck
-slug: codeck
-version: 1.0.0
-displayName: Codeck 多模型协作
-summary: 在一个 Coding Agent 中，通过 Codeck 咨询、比较和协调多个外部模型，并由当前 Agent 主持收敛。
-tags: [coding-agent, multi-model, orchestration, code-review, china-models]
 license: MIT
-homepage: https://github.com/isdou/codeck
-description: Route explicit requests from a host coding agent to one or more locally configured AI executors through Codeck, attach Markdown or other project files, moderate cross-model consultation, expose disagreements, and synthesize traceable results. Use when the user explicitly names Codeck or asks to consult, compare, or delegate to Claude, Gemini, Kimi, DeepSeek, Qwen, GLM, MiniMax, Grok, Antigravity, or another configured executor. Do not invoke an external model merely because a task is complex.
+description: Keep Codex as the host. Use Codeck when the user explicitly asks to call Agy/AGY, Antigravity, Gemini, Claude, Kimi, Grok, Codeck, or another configured external executor. These names mean external Codeck executors, never internal Codex subagents. Build a compact task-specific brief, call that specialist, and return the result to Codex. Never invoke or choose an external provider merely because a task is difficult.
+metadata:
+  slug: codeck
+  version: "1.0.3"
+  displayName: Codeck 外部模型技能
+  summary: 留在 Codex，按需调用用户点名的外部模型完成其擅长的局部任务，再把结果带回 Codex。
+  tags: [codex, specialist, agy, antigravity, gemini, claude, kimi, handoff]
+  homepage: https://github.com/isdou/codeck
 ---
 
 # Codeck
 
-Use Codeck as the execution bridge while the current coding agent remains the host and moderator. Treat a host product's model selector as unrelated: switching the active chat model is not the same as consulting external models through Codeck.
+**Keep building in Codex. Call the right model only when you need it.**
 
-## Choose the workflow
+Codex remains the host, keeps the full product conversation, and makes the final decision. External models are temporary specialists for one explicitly requested task.
 
-- Use a single `ask` for a read-only second opinion from a named executor.
-- Use a council for independent opinions from two or more genuinely different underlying model providers.
-- Use `delegate` only when the user explicitly asks an external executor to implement changes.
-- Use `pick` before `auto` when routing is uncertain.
+## Critical dispatch rule
 
-When a routed tool result has `status: "running"` or `status: "pending"`, treat it as an
-in-progress job rather than a model answer. Call `wait_run` in bounded intervals (no more than
-45 seconds per call) until the run is terminal, then use its `output`. A short MCP call can be
-cut off by the host while Agy or another executor continues in the background; use the returned
-`runId` to recover the final answer.
+When the user says "use/ask/call Agy", `AGY`, Antigravity, Gemini, or another external model, invoke Codeck. Never create or spawn an internal Codex subagent named after that model.
 
-Never describe one model playing several roles as multi-model consensus. Label it `single-model-multi-role`.
+Use these canonical executor names:
 
-## Preflight
+- `Agy`, `AGY`, or `Antigravity` -> `antigravity`
+- `Gemini` -> `gemini` (maintained Agy/Antigravity runtime)
+- `Gemini CLI` -> `gemini_cli` (legacy CLI, only when explicitly requested)
+- `Gemini API` -> `gemini_api`
+- `Gemini Image` -> `gemini_image`
 
-1. Run `command -v codeck`.
-2. If unavailable, stop and explain that the Codeck CLI is required. Do not install it without user authorization.
-3. Run `codeck doctor` and `codeck list` in the target project.
-4. Use only healthy, configured executors whose declared mode and permissions fit the task.
-5. If the project is not initialized, ask before running `codeck init` because it creates `.codeck/` files.
+Executor names are case-insensitive. If the requested canonical executor is unavailable, report that exact failure; do not replace it with an internal subagent or a different provider.
 
-Read [references/providers.md](references/providers.md) when configuring executors, choosing providers for a regional network, or explaining why a requested model is unavailable.
+## When to use Codeck
 
-## Prepare the handoff
+Use Codeck only when the user explicitly names an external model or Codeck, for example:
 
-Write a compact Markdown brief for non-trivial work. Include the objective, constraints, questions, acceptance criteria, and only the files needed by the external model. Prefer a file attachment over embedding a long brief in the command:
+- “让 Gemini 根据当前产品背景写 App Store 文案。”
+- “用 Claude 复核这个架构，不要修改代码。”
+- “让 Kimi 阅读这几份长文档并提炼差异。”
 
-```bash
-codeck ask <executor> "Read the attached task brief and return an evidence-backed review." -f task.md
+Do not call Codeck because a task is complex. Do not automatically select a provider. Do not turn one request into a council unless the user explicitly asks for comparison.
+
+## Run the specialist task
+
+1. Determine the absolute path of the project attached to the current Codex task. Never use the Codeck package directory or an assumed MCP server working directory.
+2. Do not require the user to run `codeck init`. The first project-scoped Codeck call safely creates missing `.codeck/config.toml`, `.codeck/project.md`, and `.codeck/constraints.md` files without overwriting existing files.
+3. Resolve the model the user named to its configured executor without substituting another provider.
+4. Write one clear `task` describing the requested output.
+5. Synthesize a compact `brief` from facts already present in the current Codex conversation. Include only relevant product purpose, target user, decisions, constraints, source material, and output format. Do not make the user repeat context that Codex already has, and do not copy the full conversation.
+6. Set `includeRepository=false` for copywriting, naming, marketing, visual direction, and other non-code work. Set it to `true` only when Git state, diff, repository rules, or executor default source files are relevant.
+7. Attach only files needed for this task. Codeck always includes `.codeck/project.md` and `.codeck/constraints.md` when present.
+8. Call `route_task` directly with `mode="ask"`, the explicit executor, `projectPath`, `task`, `brief`, `includeRepository`, and any required files. Use `doctor` only for troubleshooting or when the user asks for a health report.
+9. If Codeck returns `executor_setup_required`, follow the setup boundary below and retry only after the executor is ready.
+10. If the run is pending or running, call `wait_run` with the same `projectPath` and `runId` in bounded intervals until terminal.
+11. Return the specialist result in the current Codex conversation. Codex remains responsible for editing, adopting, or rejecting it.
+12. If the result contains `updateNotice`, show it once after the specialist result. Never hide it inside the answer or interrupt the task for an update check.
+
+## First-use setup boundary
+
+- Installing the Codex plugin provides both this Skill and a bundled Codeck MCP runtime. It does not require a repository clone, `npm install`, `npm link`, or manual project initialization. Node.js 20 or newer must still be available to start the local MCP runtime.
+- Installing this Skill alone provides routing instructions but cannot register the Codeck MCP server. If `route_task` is unavailable, tell the user to install the Codeck plugin; do not pretend that an external model was called.
+- A missing provider CLI, browser login, OAuth flow, or API key is provider-specific. Never silently install software, open a login flow, or replace the requested provider.
+- When `executor_setup_required` includes `installCommand`, show the reason and ask for explicit user approval before running that command. Installation changes the user's machine. Authentication and secrets always remain user actions; tell users to enter keys in `.env` or `.codeck/.env`, never in chat.
+- If the CLI is already installed but absent from the MCP process PATH, prefer restarting Codex or fixing the configured command/PATH over reinstalling it.
+
+Example task payload:
+
+```json
+{
+  "mode": "ask",
+  "executor": "gemini_api",
+  "projectPath": "/absolute/path/to/project",
+  "task": "Write an App Store subtitle, promotional text, and full description in Simplified Chinese.",
+  "brief": "The product is ... Target users are ... Confirmed positioning is ... Tone should be ... Avoid ...",
+  "includeRepository": false,
+  "files": []
+}
 ```
 
-Do not include secrets, credentials, unrelated source files, or private user data. Tell the user when task content will leave the host product and be sent to another provider.
+## Safety and scope
 
-Read [references/artifacts.md](references/artifacts.md) for the input brief and final artifact schemas.
+- Default to `ask`. Use `delegate` only when the user explicitly asks the external executor to modify files or run commands.
+- Treat permission fields as declarations unless the underlying CLI enforces them. Report the actual executor/provider and any limitation.
+- Tell the user when project content will leave Codex and be sent through another provider.
+- Never include credentials, unrelated files, private data, or the entire conversation.
+- Preserve the run ID for recovery and traceability, but do not make audit features the center of the user experience.
 
-## Run a multi-model council
+## Return format
 
-1. Keep the current coding agent as moderator.
-2. Select at least two healthy executors backed by distinct providers. Prefer capability fit and availability over brand order.
-3. Give every first-round expert the same facts and core question, plus a distinct review role.
-4. Collect first-round answers independently before exposing one expert's answer to another.
-5. Extract claims, evidence, assumptions, risks, and disagreements.
-6. Ask targeted follow-ups only about material disagreements. Attach the relevant prior outputs as Markdown files.
-7. Stop when the acceptance criteria are met, remaining disagreements are explicitly documented, or the configured round limit is reached.
-8. Produce `report.md`, `summary.md`, and `decisions.json` when writing artifacts is in scope; otherwise return the same structure in the response.
+Lead with the requested artifact or expert conclusion. Then briefly identify the executor that actually ran and any important limitation. Keep the handoff concise so Codex can continue the product work immediately.
 
-Use `codeck compare <executor-a>,<executor-b> "<task>" -f task.md` when all experts should receive the same prompt. Use separate `codeck ask` calls when roles or follow-up questions differ. Do not claim parallel execution unless the observed run actually ran concurrently.
-
-Read [references/moderation.md](references/moderation.md) for role prompts, disagreement handling, and convergence rules.
-
-## Route safely
-
-- Default to `ask`, which is intended for read-only consultation.
-- Do not add `-y` or call `delegate` unless the user authorized external implementation.
-- Treat permission fields as declarations unless the underlying CLI also enforces a sandbox.
-- Do not silently substitute a provider. Report the requested executor, actual executor/provider, and fallback reason.
-- Do not hardcode current model IDs. Discover or read them from local configuration because provider model names change.
-- If fewer than two distinct providers are available, continue only as a single-model consultation and state the limitation.
-- Preserve raw external outputs or Codeck run IDs so the synthesis remains auditable.
-- Codeck archives each routed request inside the project. Use `list_runs` or `search_runs` to
-  find prior work, and `get_run(includeContent=true)` only when the redacted prompt/context is
-  actually needed. Do not inject archive history automatically into a new handoff.
-- When a run is genuinely reusable knowledge, call `curate_run` with focused tags and a note.
-  Curation is explicit; do not mark every historical run as knowledge.
-- Use `replay_run` only when the user wants a new model call. Historical-snapshot replay is the
-  default; `currentContext=true` is an explicit alternative. Every replay creates a new linked
-  run.
-
-## Return the result
-
-Lead with the moderator's conclusion. Then state:
-
-- which executors and underlying providers actually ran;
-- where they agreed and disagreed;
-- what evidence supports the decision;
-- unresolved risks and recommended verification;
-- any fallback, failure, estimated usage, or regional limitation.
-
-Keep the short summary decision-oriented. Keep detailed reasoning and source attribution in the full report.
+When present, place `updateNotice` last as a separate maintenance note.

@@ -28,7 +28,7 @@ export function createHandoffPrompt(lastOutput) {
     if (!lastOutput.trim())
         return 'No previous Codeck run is available.';
     return [
-        '=== DEVDECK RAW HANDOFF ===',
+        '=== CODECK SPECIALIST RESULT ===',
         '## Key Source Output',
         lastOutput.trim(),
         '',

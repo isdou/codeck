@@ -6,6 +6,8 @@ import type { BuiltContext, ContextResource, ExecutorProfile } from './models.js
 
 export interface BuildContextOptions {
   task?: string;
+  brief?: string;
+  includeRepository?: boolean;
   executor?: ExecutorProfile;
   files?: string[];
   maxChars?: number;
@@ -19,8 +21,17 @@ function runGitCommand(cmd: string, cwd: string): string {
   }
 }
 
-function relPath(cwd: string, filePath: string): string {
-  return path.relative(cwd, path.resolve(cwd, filePath)).replaceAll(path.sep, '/');
+function isInside(root: string, candidate: string): boolean {
+  return candidate === root || candidate.startsWith(`${root}${path.sep}`);
+}
+
+export function resolveProjectFile(cwd: string, filePath: string): string {
+  const root = fs.realpathSync(cwd);
+  const absolute = fs.realpathSync(path.resolve(root, filePath));
+  if (!isInside(root, absolute) || !fs.statSync(absolute).isFile()) {
+    throw new Error(`File is outside the project or is not a regular file: ${filePath}`);
+  }
+  return path.relative(root, absolute).replaceAll(path.sep, '/');
 }
 
 function matchesPattern(file: string, pattern: string): boolean {
@@ -35,9 +46,9 @@ function isExcluded(file: string, excludes: string[]): boolean {
 }
 
 function readTextFile(cwd: string, file: string, maxBytes: number): ContextResource | null {
-  const fullPath = path.resolve(cwd, file);
-  const relative = relPath(cwd, fullPath);
   try {
+    const relative = resolveProjectFile(cwd, file);
+    const fullPath = path.resolve(fs.realpathSync(cwd), relative);
     const stat = fs.statSync(fullPath);
     if (!stat.isFile() || stat.size > maxBytes) return null;
     const content = fs.readFileSync(fullPath, 'utf8');
@@ -55,9 +66,16 @@ function readTextFile(cwd: string, file: string, maxBytes: number): ContextResou
 
 function walkFiles(cwd: string, dir: string, excludes: string[], maxFiles: number): string[] {
   const out: string[] = [];
-  const visit = (relativeDir: string) => {
+  const root = fs.realpathSync(cwd);
+  let start: string;
+  try {
+    start = fs.realpathSync(path.resolve(root, dir));
+    if (!isInside(root, start) || !fs.statSync(start).isDirectory()) return out;
+  } catch {
+    return out;
+  }
+  const visit = (absoluteDir: string) => {
     if (out.length >= maxFiles) return;
-    const absoluteDir = path.join(cwd, relativeDir);
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(absoluteDir, { withFileTypes: true });
@@ -66,13 +84,14 @@ function walkFiles(cwd: string, dir: string, excludes: string[], maxFiles: numbe
     }
     for (const entry of entries) {
       if (out.length >= maxFiles) break;
-      const relative = path.join(relativeDir, entry.name).replaceAll(path.sep, '/');
+      const absolute = path.join(absoluteDir, entry.name);
+      const relative = path.relative(root, absolute).replaceAll(path.sep, '/');
       if (isExcluded(relative, excludes)) continue;
-      if (entry.isDirectory()) visit(relative);
+      if (entry.isDirectory()) visit(absolute);
       if (entry.isFile()) out.push(relative);
     }
   };
-  visit(dir);
+  visit(start);
   return out;
 }
 
@@ -131,7 +150,8 @@ export function buildContext(cwd: string = process.cwd(), options: BuildContextO
   const config = loadConfig(cwd);
   const contextConfig = config.context;
   const resources: ContextResource[] = [];
-  const isGitRepo = fs.existsSync(path.join(cwd, '.git'));
+  const includeRepository = options.includeRepository !== false;
+  const isGitRepo = includeRepository && runGitCommand('git rev-parse --is-inside-work-tree', cwd) === 'true';
 
   pushResource(resources, {
     type: 'text',
@@ -139,6 +159,15 @@ export function buildContext(cwd: string = process.cwd(), options: BuildContextO
     content: options.task || '',
     chars: (options.task || '').length,
   }, true);
+
+  if (options.brief?.trim()) {
+    pushResource(resources, {
+      type: 'text',
+      label: 'Host Brief',
+      content: options.brief.trim(),
+      chars: options.brief.trim().length,
+    }, true);
+  }
 
   const projectPath = path.join(getCodeckDir(cwd), 'project.md');
   if (fs.existsSync(projectPath)) {
@@ -169,7 +198,7 @@ export function buildContext(cwd: string = process.cwd(), options: BuildContextO
     }
   }
 
-  if (contextConfig.include_readme) {
+  if (includeRepository && contextConfig.include_readme) {
     for (const readme of ['README.md', 'readme.md', 'README', 'Readme.md']) {
       const resource = readTextFile(cwd, readme, contextConfig.max_file_bytes);
       if (resource) {
@@ -180,19 +209,20 @@ export function buildContext(cwd: string = process.cwd(), options: BuildContextO
   }
 
   const requested = new Set<string>(options.files || []);
-  for (const include of options.executor?.context_include || []) {
-    for (const file of filesForInclude(cwd, include, contextConfig.exclude, contextConfig.max_files)) {
-      requested.add(file);
+  if (includeRepository) {
+    for (const include of options.executor?.context_include || []) {
+      for (const file of filesForInclude(cwd, include, contextConfig.exclude, contextConfig.max_files)) {
+        requested.add(file);
+      }
     }
   }
 
   for (const file of requested) {
-    const relative = relPath(cwd, file);
-    if (isExcluded(relative, contextConfig.exclude)) continue;
-    pushResource(resources, readTextFile(cwd, relative, contextConfig.max_file_bytes));
+    if (isExcluded(file, contextConfig.exclude)) continue;
+    pushResource(resources, readTextFile(cwd, file, contextConfig.max_file_bytes));
   }
 
-  if (contextConfig.include_agent_files) {
+  if (includeRepository && contextConfig.include_agent_files) {
     const agentFiles = fs.readdirSync(cwd)
       .filter((file) => {
         const upper = file.toUpperCase();

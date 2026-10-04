@@ -1,4 +1,4 @@
 interface:
-  display_name: "Codeck 多模型协作"
-  short_description: "在一个 Coding Agent 中咨询并协调多个外部模型"
-  default_prompt: "Use $codeck to ask multiple configured AI executors for independent reviews and synthesize their conclusions."
+  display_name: "Codeck 外部模型技能"
+  short_description: "留在 Codex，按需调用你点名的模型"
+  default_prompt: "Use $codeck to call the external Agy/AGY, Antigravity, Gemini, Claude, Kimi, or other model I explicitly named. Never create an internal Codex subagent with that name. Pass only the context needed and bring the result back to Codex."

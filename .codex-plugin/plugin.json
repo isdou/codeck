@@ -1,7 +1,7 @@
 {
   "name": "codeck",
-  "version": "0.4.0",
-  "description": "Route explicit Codex requests to local AI executors and keep a project-local, redacted archive of every handoff.",
+  "version": "0.4.4+codex.20260901140807",
+  "description": "Keep building in Codex and call a user-named external model only for the task where it is needed.",
   "author": {
     "name": "isdou"
   },
@@ -9,18 +9,21 @@
   "repository": "https://github.com/isdou/codeck",
   "license": "MIT",
   "keywords": [
-    "coding-agent",
-    "multi-model",
-    "mcp",
-    "archive",
-    "codex"
+    "codex",
+    "specialist",
+    "agy",
+    "antigravity",
+    "gemini",
+    "claude",
+    "kimi",
+    "mcp"
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Codeck \u591a\u6a21\u578b\u534f\u4f5c",
-    "shortDescription": "\u54a8\u8be2\u5916\u90e8\u6a21\u578b\u5e76\u4fdd\u5b58\u53ef\u8ffd\u6eaf\u7684\u9879\u76ee\u7ea7\u4ea4\u63a5\u8bb0\u5f55\u3002",
-    "longDescription": "\u901a\u8fc7 Codeck \u628a Codex \u7684\u660e\u786e\u8bf7\u6c42\u8def\u7531\u7ed9\u672c\u5730\u914d\u7f6e\u7684 Gemini\u3001Claude\u3001Kimi\u3001Grok \u6216 Antigravity \u6267\u884c\u5668\uff0c\u5e76\u5728\u9879\u76ee\u5185\u4fdd\u5b58\u9ed8\u8ba4\u63a9\u7801\u7684\u8bf7\u6c42\u3001\u4e0a\u4e0b\u6587\u5feb\u7167\u3001\u56de\u590d\u3001\u72b6\u6001\u548c\u53ef\u590d\u7528\u77e5\u8bc6\u6807\u8bb0\u3002\u957f\u4efb\u52a1\u4f1a\u81ea\u52a8\u8f6c\u4e3a\u540e\u53f0\u8fd0\u884c\u5e76\u53ef\u8f6e\u8be2\u53d6\u56de\u3002",
+    "displayName": "Codeck \u5916\u90e8\u6a21\u578b\u6280\u80fd",
+    "shortDescription": "\u7559\u5728 Codex\uff0c\u6309\u9700\u8c03\u7528\u4f60\u70b9\u540d\u7684\u6a21\u578b\u3002",
+    "longDescription": "Codex \u4fdd\u6301\u4e3b\u6301\uff1bCodeck \u4e3a\u7528\u6237\u70b9\u540d\u7684 Agy\u3001Gemini\u3001Claude\u3001Kimi \u7b49\u5916\u90e8\u6267\u884c\u5668\u51c6\u5907\u672c\u6b21\u4efb\u52a1\u6240\u9700\u7684\u80cc\u666f\uff0c\u5e76\u628a\u7ed3\u679c\u5e26\u56de\u5f53\u524d Codex \u5de5\u4f5c\u6d41\u3002",
     "developerName": "isdou",
     "category": "Productivity",
     "capabilities": [
@@ -29,9 +32,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "\u7528 Agy \u8bc4\u4f30\u8fd9\u4e2a\u65b9\u6848\u7684\u98ce\u9669",
-      "\u8ba9\u4e24\u4e2a\u5916\u90e8\u6a21\u578b\u72ec\u7acb review \u5f53\u524d diff",
-      "\u641c\u7d22\u9879\u76ee\u91cc\u53ef\u590d\u7528\u7684 Codeck \u77e5\u8bc6\u8bb0\u5f55"
+      "\u901a\u8fc7 Codeck \u8c03\u7528 Agy \u5206\u6790\u5f53\u524d\u65b9\u6848\uff0c\u4e0d\u8981\u521b\u5efa Codex subagent",
+      "\u901a\u8fc7 Codeck \u8ba9 Gemini \u6839\u636e\u5f53\u524d\u4ea7\u54c1\u80cc\u666f\u5199 App Store \u6587\u6848",
+      "\u7528 Claude \u590d\u6838\u5f53\u524d\u67b6\u6784\uff0c\u53ea\u7ed9\u5efa\u8bae\uff0c\u4e0d\u8981\u4fee\u6539\u4ee3\u7801"
     ],
     "brandColor": "#2563EB"
   }
